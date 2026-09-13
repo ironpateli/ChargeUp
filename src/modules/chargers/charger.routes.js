@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireAuth, requireRole } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import {
   createCharger,
@@ -31,11 +32,17 @@ chargerRouter.get('/:chargerId', validate(getChargerSchema), async (req, res, ne
   }
 });
 
-chargerRouter.post('/', validate(createChargerSchema), async (req, res, next) => {
+chargerRouter.post(
+  '/',
+  requireAuth,
+  requireRole('CHARGER_OWNER', 'ADMIN'),
+  validate(createChargerSchema),
+  async (req, res, next) => {
   try {
-    const charger = await createCharger(req.validated.body);
+    const charger = await createCharger(req.user.id, req.validated.body);
     res.status(201).json({ data: charger });
   } catch (error) {
     next(error);
   }
-});
+  }
+);

@@ -22,7 +22,6 @@ export const getChargerSchema = z.object({
 
 export const createChargerSchema = z.object({
   body: z.object({
-    ownerProfileId: z.number().int().positive(),
     name: z.string().trim().min(2).max(120),
     description: z.string().trim().max(1000).optional(),
     addressLine1: z.string().trim().min(2).max(200),

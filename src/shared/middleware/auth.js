@@ -1,7 +1,8 @@
 import { AppError } from '../errors.js';
 import { verifyAccessToken } from '../security/jwt.js';
+import { query } from '../db.js';
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const authHeader = req.get('authorization');
 
   if (!authHeader?.startsWith('Bearer ')) {
@@ -16,10 +17,24 @@ export function requireAuth(req, res, next) {
 
   try {
     const payload = verifyAccessToken(token);
+    const result = await query(
+      `
+        SELECT id, role
+        FROM users
+        WHERE id = $1
+      `,
+      [payload.sub]
+    );
+
+    const user = result.rows[0];
+
+    if (!user) {
+      return next(new AppError('Invalid or expired access token.', 401, 'INVALID_ACCESS_TOKEN'));
+    }
 
     req.user = {
-      id: Number(payload.sub),
-      role: payload.role
+      id: Number(user.id),
+      role: user.role
     };
 
     return next();

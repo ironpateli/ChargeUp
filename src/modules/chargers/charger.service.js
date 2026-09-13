@@ -1,5 +1,5 @@
 import { query, withTransaction } from '../../shared/db.js';
-import { assertFound } from '../../shared/errors.js';
+import { AppError, assertFound } from '../../shared/errors.js';
 
 export async function searchChargers(filters) {
   const result = await query(
@@ -85,8 +85,23 @@ async function findChargerById(dbQuery, chargerId) {
   );
 }
 
-export async function createCharger(input) {
+export async function createCharger(userId, input) {
   return withTransaction(async (client) => {
+    const ownerProfileResult = await client.query(
+      `
+        SELECT id
+        FROM owner_profiles
+        WHERE user_id = $1
+      `,
+      [userId]
+    );
+
+    const ownerProfile = ownerProfileResult.rows[0];
+
+    if (!ownerProfile) {
+      throw new AppError('Owner profile is required before listing chargers.', 403, 'OWNER_PROFILE_REQUIRED');
+    }
+
     const chargerResult = await client.query(
       `
         INSERT INTO chargers (
@@ -107,7 +122,7 @@ export async function createCharger(input) {
         RETURNING id
       `,
       [
-        input.ownerProfileId,
+        ownerProfile.id,
         input.name,
         input.description ?? null,
         input.addressLine1,
@@ -127,7 +142,7 @@ export async function createCharger(input) {
     await client.query(
       `
         INSERT INTO charger_connector_types (charger_id, connector_type)
-        SELECT DISTINCT $1, unnest($2::connector_type[])
+        SELECT DISTINCT $1::bigint, unnest($2::connector_type[])
       `,
       [chargerId, input.connectorTypes]
     );

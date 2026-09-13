@@ -9,6 +9,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { bookingRouter } from './modules/bookings/booking.routes.js';
 import { chargerRouter } from './modules/chargers/charger.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
+import { ownerProfileRouter } from './modules/owner-profiles/owner-profile.routes.js';
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use(morgan('dev'));
 
 app.use('/health', healthRouter);
 app.use('/auth', authRouter);
+app.use('/owner-profiles', ownerProfileRouter);
 app.use('/chargers', chargerRouter);
 app.use('/bookings', bookingRouter);
 
