@@ -23,6 +23,8 @@ export async function searchChargers(filters) {
         c.address_line_1,
         c.city,
         c.state,
+        c.latitude,
+        c.longitude,
         array_agg(cct.connector_type ORDER BY cct.connector_type) AS connector_types,
         c.power_kw,
         c.price_per_hour,

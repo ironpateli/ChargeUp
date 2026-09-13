@@ -132,6 +132,8 @@ Meaning:
 
 ## Run Locally
 
+### Backend
+
 ```bash
 npm install
 cp .env.example .env
@@ -139,6 +141,18 @@ npm run dev
 ```
 
 The API starts on `http://localhost:4000`.
+
+### Frontend
+
+```bash
+cd web
+npm install
+cp .env.example .env
+npm run build
+npm run preview
+```
+
+The React app preview starts on `http://127.0.0.1:4173`.
 
 ## Demo Seed
 
