@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Calendar, CheckCircle2, IndianRupee, LocateFixed, RefreshCw, Search, Zap } from 'lucide-react';
+import { Calendar, CheckCircle2, IndianRupee, LocateFixed, MapPin, RefreshCw, Search, Zap } from 'lucide-react';
 import { apiRequest } from '../api.js';
 
 const MUMBAI_CENTER = [19.076, 72.8777];
@@ -22,6 +22,17 @@ const chargerIcon = L.divIcon({
   iconSize: [34, 34],
   iconAnchor: [17, 17]
 });
+
+const userLocationIcon = L.divIcon({
+  className: 'user-location-marker',
+  html: '<span>You</span>',
+  iconSize: [42, 42],
+  iconAnchor: [21, 21]
+});
+
+function rangesOverlap(firstStart, firstEnd, secondStart, secondEnd) {
+  return firstStart < secondEnd && secondStart < firstEnd;
+}
 
 function formatConnectorTypes(value) {
   if (Array.isArray(value)) {
@@ -64,12 +75,14 @@ function normalizeCharger(charger) {
 
 export function MapPage() {
   const [center, setCenter] = useState(MUMBAI_CENTER);
+  const [myLocation, setMyLocation] = useState(null);
   const [chargers, setChargers] = useState([]);
   const [selected, setSelected] = useState(null);
   const [filters, setFilters] = useState({
     q: '',
     connectorType: '',
-    minPowerKw: ''
+    minPowerKw: '',
+    sortBy: 'nearest'
   });
   const [date, setDate] = useState(DEFAULT_DATE);
   const [availability, setAvailability] = useState(null);
@@ -84,6 +97,50 @@ export function MapPage() {
   const selectedPosition = useMemo(() => (
     selected ? [selected.latitude, selected.longitude] : center
   ), [selected, center]);
+
+  const slots = useMemo(() => {
+    if (availability?.slots) {
+      return availability.slots;
+    }
+
+    if (!availability?.operatingHours) {
+      return [];
+    }
+
+    const slotMinutes = availability.slotMinutes ?? 60;
+    const bookedRanges = (availability.bookedSlots ?? []).map((slot) => ({
+      startsAt: new Date(slot.startsAt),
+      endsAt: new Date(slot.endsAt)
+    }));
+    const availableStarts = new Set((availability.availableSlots ?? []).map((slot) => (
+      new Date(slot.startsAt).getTime()
+    )));
+    const operatingStart = new Date(availability.operatingHours.startsAt);
+    const operatingEnd = new Date(availability.operatingHours.endsAt);
+    const now = new Date();
+    const nextSlots = [];
+
+    for (
+      let startsAt = new Date(operatingStart);
+      startsAt < operatingEnd;
+      startsAt = new Date(startsAt.getTime() + slotMinutes * 60 * 1000)
+    ) {
+      const endsAt = new Date(startsAt.getTime() + slotMinutes * 60 * 1000);
+      const isBooked = bookedRanges.some((slot) => (
+        rangesOverlap(startsAt, endsAt, slot.startsAt, slot.endsAt)
+      ));
+      const isPassed = startsAt <= now;
+      const isAvailable = availableStarts.has(startsAt.getTime()) && !isBooked && !isPassed;
+
+      nextSlots.push({
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        status: isBooked ? 'BOOKED' : isPassed ? 'PASSED' : isAvailable ? 'AVAILABLE' : 'UNAVAILABLE'
+      });
+    }
+
+    return nextSlots;
+  }, [availability]);
 
   function buildSearchQuery(searchCenter = center) {
     const params = new URLSearchParams({
@@ -103,6 +160,8 @@ export function MapPage() {
     if (filters.minPowerKw) {
       params.set('minPowerKw', filters.minPowerKw);
     }
+
+    params.set('sortBy', filters.sortBy);
 
     return params.toString();
   }
@@ -152,12 +211,16 @@ export function MapPage() {
   }, []);
 
   useEffect(() => {
+    requestCurrentLocation({ quiet: true });
+  }, []);
+
+  useEffect(() => {
     if (selected) {
       loadAvailability(selected.id);
     }
   }, [date, selected?.id]);
 
-  function useCurrentLocation() {
+  function requestCurrentLocation(options = {}) {
     if (!navigator.geolocation) {
       setError('Geolocation is not available in this browser.');
       return;
@@ -167,15 +230,25 @@ export function MapPage() {
       (position) => {
         const nextCenter = [position.coords.latitude, position.coords.longitude];
         setCenter(nextCenter);
-        loadChargers(nextCenter);
+        setMyLocation(nextCenter);
+        loadChargers(nextCenter, options);
       },
-      () => setError('Could not access your location.')
+      () => {
+        if (!options.quiet) {
+          setError('Could not access your location.');
+        }
+      }
     );
   }
 
   function applySearch(event) {
     event.preventDefault();
     loadChargers();
+  }
+
+  function selectCharger(charger) {
+    setSelected(charger);
+    setCenter([charger.latitude, charger.longitude]);
   }
 
   async function bookSlot() {
@@ -220,7 +293,7 @@ export function MapPage() {
             <RefreshCw size={16} className={loading ? 'spin-icon' : ''} />
             {loading ? 'Refreshing...' : 'Refresh'}
           </button>
-          <button className="icon-button" type="button" onClick={useCurrentLocation} title="Use my location">
+          <button className="icon-button" type="button" onClick={() => requestCurrentLocation()} title="Use my location">
             <LocateFixed size={18} />
           </button>
         </div>
@@ -265,6 +338,17 @@ export function MapPage() {
             <option value="100">100 kW+</option>
           </select>
         </label>
+        <label>
+          Sort
+          <select
+            value={filters.sortBy}
+            onChange={(event) => setFilters({ ...filters, sortBy: event.target.value })}
+          >
+            <option value="nearest">Nearest first</option>
+            <option value="fastest">Fastest first</option>
+            <option value="cheapest">Cheapest first</option>
+          </select>
+        </label>
         <button className="primary-button" type="submit" disabled={loading}>
           Search
         </button>
@@ -273,6 +357,57 @@ export function MapPage() {
       {searchMessage && <div className="inline-notice"><CheckCircle2 size={16} /> {searchMessage}</div>}
 
       <div className="map-workspace">
+        <aside className="search-results-panel">
+          <div className="panel-heading">
+            <h2>Stations</h2>
+            <span className="status-pill">{chargers.length}</span>
+          </div>
+          <label className="station-picker">
+            Choose station
+            <select
+              value={selected?.id ?? ''}
+              onChange={(event) => {
+                const charger = chargers.find((item) => item.id === Number(event.target.value));
+
+                if (charger) {
+                  selectCharger(charger);
+                }
+              }}
+            >
+              <option value="">Select from results</option>
+              {chargers.map((charger) => (
+                <option key={charger.id} value={charger.id}>
+                  {charger.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="charger-result-list">
+            {chargers.map((charger) => (
+              <button
+                key={charger.id}
+                className={`charger-result ${selected?.id === charger.id ? 'active' : ''}`}
+                type="button"
+                onClick={() => selectCharger(charger)}
+              >
+                <span className="charger-result-title">{charger.name}</span>
+                <span className="muted">{charger.addressLine1}, {charger.city}</span>
+                <span className="charger-result-meta">
+                  <span>{charger.powerKw} kW</span>
+                  <span>{charger.connectorTypes}</span>
+                  {charger.distanceMeters !== null && <span>{charger.distanceMeters} m</span>}
+                </span>
+              </button>
+            ))}
+            {!chargers.length && (
+              <div className="empty-mini">
+                <MapPin size={20} />
+                <span>No active chargers found.</span>
+              </div>
+            )}
+          </div>
+        </aside>
+
         <MapContainer center={MUMBAI_CENTER} zoom={12} className="map-canvas">
           <RecenterMap center={selected ? selectedPosition : center} />
           <TileLayer
@@ -289,6 +424,11 @@ export function MapPage() {
               <Popup>{charger.name}</Popup>
             </Marker>
           ))}
+          {myLocation && (
+            <Marker position={myLocation} icon={userLocationIcon}>
+              <Popup>Your location</Popup>
+            </Marker>
+          )}
         </MapContainer>
 
         <aside className="side-panel">
@@ -327,10 +467,16 @@ export function MapPage() {
 
               <h3>Available slots</h3>
               <div className="slot-list">
-                {availabilityLoading ? <p className="muted">Checking slots...</p> : availability?.availableSlots?.length ? availability.availableSlots.map((slot) => (
-                  <button key={slot.startsAt} className="slot-button" type="button" onClick={() => setPendingSlot(slot)}>
+                {availabilityLoading ? <p className="muted">Checking slots...</p> : slots.length ? slots.map((slot) => (
+                  <button
+                    key={slot.startsAt}
+                    className={`slot-button ${slot.status !== 'AVAILABLE' ? 'disabled-slot' : ''}`}
+                    type="button"
+                    onClick={() => slot.status === 'AVAILABLE' && setPendingSlot(slot)}
+                    disabled={slot.status !== 'AVAILABLE'}
+                  >
                     <span>{formatSlotTime(slot)}</span>
-                    <small>Book</small>
+                    <small>{slot.status === 'AVAILABLE' ? 'Book' : slot.status === 'BOOKED' ? 'Booked' : slot.status === 'PASSED' ? 'Passed' : 'Unavailable'}</small>
                   </button>
                 )) : <p className="muted">No slots available for this date.</p>}
               </div>

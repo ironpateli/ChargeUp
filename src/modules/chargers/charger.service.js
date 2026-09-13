@@ -29,6 +29,12 @@ export async function searchChargers(filters) {
         c.power_kw,
         c.price_per_hour,
         c.status,
+        GREATEST(
+          similarity(c.name, COALESCE($4::text, '')),
+          similarity(c.address_line_1, COALESCE($4::text, '')),
+          similarity(c.city, COALESCE($4::text, '')),
+          similarity(c.state, COALESCE($4::text, ''))
+        ) AS search_score,
         ST_Distance(
           c.location,
           ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
@@ -47,6 +53,16 @@ export async function searchChargers(filters) {
           OR c.address_line_1 ILIKE '%' || $4 || '%'
           OR c.city ILIKE '%' || $4 || '%'
           OR c.state ILIKE '%' || $4 || '%'
+          OR similarity(c.name, $4) > 0.18
+          OR similarity(c.address_line_1, $4) > 0.18
+          OR similarity(c.city, $4) > 0.18
+          OR similarity(c.state, $4) > 0.18
+          OR EXISTS (
+            SELECT 1
+            FROM charger_connector_types search_cct
+            WHERE search_cct.charger_id = c.id
+              AND search_cct.connector_type::text ILIKE '%' || $4 || '%'
+          )
         )
         AND ($5::connector_type IS NULL OR EXISTS (
           SELECT 1
@@ -56,7 +72,16 @@ export async function searchChargers(filters) {
         ))
         AND ($6::numeric IS NULL OR c.power_kw >= $6)
       GROUP BY c.id
-      ORDER BY distance_meters ASC
+      ORDER BY
+        CASE WHEN $7 = 'fastest' THEN c.power_kw END DESC,
+        CASE WHEN $7 = 'cheapest' THEN c.price_per_hour END ASC,
+        CASE WHEN $4::text IS NOT NULL THEN GREATEST(
+          similarity(c.name, $4),
+          similarity(c.address_line_1, $4),
+          similarity(c.city, $4),
+          similarity(c.state, $4)
+        ) END DESC,
+        distance_meters ASC
       LIMIT 50
     `,
     [
@@ -65,7 +90,8 @@ export async function searchChargers(filters) {
       filters.radiusMeters,
       filters.q ?? null,
       filters.connectorType ?? null,
-      filters.minPowerKw ?? null
+      filters.minPowerKw ?? null,
+      filters.sortBy
     ]
   );
 
@@ -118,6 +144,7 @@ export async function getChargerAvailability(chargerId, date) {
   }));
 
   const availableSlots = [];
+  const slots = [];
 
   if (charger.status === 'ACTIVE') {
     const bookedRanges = bookedSlots.map((slot) => ({
@@ -131,8 +158,26 @@ export async function getChargerAvailability(chargerId, date) {
       const isBooked = bookedRanges.some((slot) => (
         rangesOverlap(startsAt, endsAt, slot.startsAt, slot.endsAt)
       ));
+      const isPassed = startsAt <= new Date();
 
-      if (!isBooked && startsAt > new Date()) {
+      if (isBooked) {
+        slots.push({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          status: 'BOOKED'
+        });
+      } else if (isPassed) {
+        slots.push({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          status: 'PASSED'
+        });
+      } else {
+        slots.push({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          status: 'AVAILABLE'
+        });
         availableSlots.push({
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString()
@@ -151,7 +196,8 @@ export async function getChargerAvailability(chargerId, date) {
       endsAt: toIsoAtLocalHour(date, AVAILABILITY_END_HOUR)
     },
     bookedSlots,
-    availableSlots
+    availableSlots,
+    slots
   };
 }
 

@@ -4,6 +4,7 @@ const latitude = z.coerce.number().min(-90).max(90);
 const longitude = z.coerce.number().min(-180).max(180);
 const connectorType = z.enum(['CCS2', 'TYPE_2', 'CHADEMO', 'GB_T', 'TESLA_NACS']);
 const ownerChargerStatus = z.enum(['ACTIVE', 'INACTIVE']);
+const chargerSearchSort = z.enum(['nearest', 'fastest', 'cheapest']);
 const dateOnly = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must use YYYY-MM-DD format')
   .refine((value) => {
@@ -22,7 +23,8 @@ export const searchChargersSchema = z.object({
     radiusMeters: z.coerce.number().int().positive().max(50000).default(5000),
     q: z.string().trim().min(1).max(120).optional(),
     connectorType: connectorType.optional(),
-    minPowerKw: z.coerce.number().positive().optional()
+    minPowerKw: z.coerce.number().positive().optional(),
+    sortBy: chargerSearchSort.default('nearest')
   })
 });
 
