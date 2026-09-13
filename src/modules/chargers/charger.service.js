@@ -174,6 +174,119 @@ async function findChargerById(dbQuery, chargerId) {
   );
 }
 
+async function assertCanManageCharger(client, user, chargerId) {
+  const result = await client.query(
+    `
+      SELECT
+        c.id,
+        c.owner_profile_id,
+        c.status,
+        op.user_id AS owner_user_id
+      FROM chargers c
+      JOIN owner_profiles op ON op.id = c.owner_profile_id
+      WHERE c.id = $1
+    `,
+    [chargerId]
+  );
+
+  const charger = result.rows[0];
+
+  if (!charger) {
+    throw new AppError('Charger not found.', 404, 'CHARGER_NOT_FOUND');
+  }
+
+  if (user.role !== 'ADMIN' && Number(charger.owner_user_id) !== user.id) {
+    throw new AppError('Charger not found.', 404, 'CHARGER_NOT_FOUND');
+  }
+
+  return charger;
+}
+
+export async function updateCharger(user, chargerId, input) {
+  return withTransaction(async (client) => {
+    await assertCanManageCharger(client, user, chargerId);
+
+    const currentResult = await findChargerById(client.query.bind(client), chargerId);
+    const current = currentResult.rows[0];
+
+    const result = await client.query(
+      `
+        UPDATE chargers
+        SET name = $2,
+            description = $3,
+            address_line_1 = $4,
+            city = $5,
+            state = $6,
+            postal_code = $7,
+            country = $8,
+            latitude = $9,
+            longitude = $10,
+            power_kw = $11,
+            price_per_hour = $12,
+            updated_at = now()
+        WHERE id = $1
+        RETURNING id
+      `,
+      [
+        chargerId,
+        input.name ?? current.name,
+        input.description === undefined ? current.description : input.description,
+        input.addressLine1 ?? current.address_line_1,
+        input.city ?? current.city,
+        input.state ?? current.state,
+        input.postalCode ?? current.postal_code,
+        input.country ?? current.country,
+        input.latitude ?? current.latitude,
+        input.longitude ?? current.longitude,
+        input.powerKw ?? current.power_kw,
+        input.pricePerHour ?? current.price_per_hour
+      ]
+    );
+
+    if (input.connectorTypes) {
+      await client.query('DELETE FROM charger_connector_types WHERE charger_id = $1', [chargerId]);
+      await client.query(
+        `
+          INSERT INTO charger_connector_types (charger_id, connector_type)
+          SELECT DISTINCT $1::bigint, unnest($2::connector_type[])
+        `,
+        [chargerId, input.connectorTypes]
+      );
+    }
+
+    const updated = await findChargerById(client.query.bind(client), result.rows[0].id);
+    return updated.rows[0];
+  });
+}
+
+export async function updateChargerStatus(user, chargerId, status) {
+  return withTransaction(async (client) => {
+    const charger = await assertCanManageCharger(client, user, chargerId);
+
+    if (charger.status === 'PENDING_VERIFICATION' && status === 'ACTIVE') {
+      throw new AppError('Pending chargers must be verified by an admin before activation.', 409, 'CHARGER_NOT_VERIFIED');
+    }
+
+    if (charger.status === 'SUSPENDED' && user.role !== 'ADMIN') {
+      throw new AppError('Suspended chargers cannot be changed by owner.', 403, 'CHARGER_SUSPENDED');
+    }
+
+    const result = await client.query(
+      `
+        UPDATE chargers
+        SET status = $2,
+            updated_at = now()
+        WHERE id = $1
+        RETURNING id
+      `,
+      [chargerId, status]
+    );
+
+    const updated = await findChargerById(client.query.bind(client), result.rows[0].id);
+    return updated.rows[0];
+  });
+}
+
 export async function createCharger(userId, input) {
   return withTransaction(async (client) => {
     const ownerProfileResult = await client.query(

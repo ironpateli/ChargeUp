@@ -5,13 +5,17 @@ import {
   createCharger,
   getChargerAvailability,
   getChargerById,
-  searchChargers
+  searchChargers,
+  updateCharger,
+  updateChargerStatus
 } from './charger.service.js';
 import {
   createChargerSchema,
   getChargerAvailabilitySchema,
   getChargerSchema,
-  searchChargersSchema
+  searchChargersSchema,
+  updateChargerSchema,
+  updateChargerStatusSchema
 } from './charger.schemas.js';
 
 export const chargerRouter = Router();
@@ -46,6 +50,46 @@ chargerRouter.get('/:chargerId', validate(getChargerSchema), async (req, res, ne
     next(error);
   }
 });
+
+chargerRouter.patch(
+  '/:chargerId',
+  requireAuth,
+  requireRole('CHARGER_OWNER', 'ADMIN'),
+  validate(updateChargerSchema),
+  async (req, res, next) => {
+    try {
+      const charger = await updateCharger(
+        req.user,
+        req.validated.params.chargerId,
+        req.validated.body
+      );
+
+      res.json({ data: { charger } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+chargerRouter.patch(
+  '/:chargerId/status',
+  requireAuth,
+  requireRole('CHARGER_OWNER', 'ADMIN'),
+  validate(updateChargerStatusSchema),
+  async (req, res, next) => {
+    try {
+      const charger = await updateChargerStatus(
+        req.user,
+        req.validated.params.chargerId,
+        req.validated.body.status
+      );
+
+      res.json({ data: { charger } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 chargerRouter.post(
   '/',
