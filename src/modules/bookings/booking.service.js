@@ -1,7 +1,7 @@
 import { withTransaction } from '../../shared/db.js';
 import { AppError } from '../../shared/errors.js';
 
-export async function createBooking(input) {
+export async function createBooking(userId, input) {
   return withTransaction(async (client) => {
     const chargerResult = await client.query(
       `
@@ -34,7 +34,7 @@ export async function createBooking(input) {
         VALUES ($1, $2, $3, $4, 'CONFIRMED')
         RETURNING *
       `,
-      [input.userId, input.chargerId, input.startsAt, input.endsAt]
+      [userId, input.chargerId, input.startsAt, input.endsAt]
     );
 
     return bookingResult.rows[0];
