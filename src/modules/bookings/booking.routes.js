@@ -2,10 +2,14 @@ import { Router } from 'express';
 import { requireAuth } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import {
+  cancelBooking,
   createBooking,
   getMyBookings
 } from './booking.service.js';
-import { createBookingSchema } from './booking.schemas.js';
+import {
+  cancelBookingSchema,
+  createBookingSchema
+} from './booking.schemas.js';
 
 export const bookingRouter = Router();
 
@@ -22,6 +26,15 @@ bookingRouter.post('/', requireAuth, validate(createBookingSchema), async (req, 
   try {
     const booking = await createBooking(req.user.id, req.validated.body);
     res.status(201).json({ data: booking });
+  } catch (error) {
+    next(error);
+  }
+});
+
+bookingRouter.patch('/:bookingId/cancel', requireAuth, validate(cancelBookingSchema), async (req, res, next) => {
+  try {
+    const booking = await cancelBooking(req.user.id, req.validated.params.bookingId);
+    res.json({ data: { booking } });
   } catch (error) {
     next(error);
   }

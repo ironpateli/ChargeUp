@@ -13,6 +13,19 @@ function toBookingSummary(row) {
   };
 }
 
+function toBooking(row) {
+  return {
+    id: Number(row.id),
+    userId: Number(row.user_id),
+    chargerId: Number(row.charger_id),
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 export async function getMyBookings(userId) {
   const result = await query(
     `
@@ -72,5 +85,42 @@ export async function createBooking(userId, input) {
     );
 
     return bookingResult.rows[0];
+  });
+}
+
+export async function cancelBooking(userId, bookingId) {
+  return withTransaction(async (client) => {
+    const existingResult = await client.query(
+      `
+        SELECT id, status
+        FROM bookings
+        WHERE id = $1
+          AND user_id = $2
+      `,
+      [bookingId, userId]
+    );
+
+    const existingBooking = existingResult.rows[0];
+
+    if (!existingBooking) {
+      throw new AppError('Booking not found.', 404, 'BOOKING_NOT_FOUND');
+    }
+
+    if (existingBooking.status !== 'CONFIRMED') {
+      throw new AppError('Only confirmed bookings can be cancelled.', 409, 'BOOKING_NOT_CANCELLABLE');
+    }
+
+    const result = await client.query(
+      `
+        UPDATE bookings
+        SET status = 'CANCELLED',
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [bookingId]
+    );
+
+    return toBooking(result.rows[0]);
   });
 }

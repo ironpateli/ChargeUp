@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export const cancelBookingSchema = z.object({
+  params: z.object({
+    bookingId: z.coerce.number().int().positive()
+  })
+});
+
 export const createBookingSchema = z.object({
   body: z.object({
     chargerId: z.number().int().positive(),
