@@ -204,19 +204,23 @@ select {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .sidebar {
-  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  height: 100vh;
   padding: 22px;
   background: #ffffff;
   border-right: 1px solid #dbe5df;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  overflow: hidden;
 }
 
 .nav-stack {
@@ -242,7 +246,7 @@ select {
 }
 
 .user-card {
-  margin-top: auto;
+  margin-top: 6px;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -263,11 +267,21 @@ select {
 
 .main {
   min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  overflow: auto;
 }
 
 .map-page,
 .page-section {
   padding: 22px;
+}
+
+.map-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .map-toolbar,
@@ -365,13 +379,15 @@ select {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 380px;
   gap: 16px;
-  min-height: calc(100vh - 112px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .search-results-panel {
   position: relative;
   z-index: 50;
-  min-height: calc(100vh - 112px);
+  min-height: 0;
   padding: 16px;
   overflow: auto;
   background: #ffffff;
@@ -444,7 +460,8 @@ select {
 .map-canvas {
   position: relative;
   z-index: 0;
-  min-height: calc(100vh - 112px);
+  min-height: 0;
+  height: 100%;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #dbe5df;
@@ -488,8 +505,26 @@ select {
 .side-panel {
   position: relative;
   z-index: 50;
-  padding: 20px;
-  overflow: auto;
+  min-height: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.side-panel > .muted {
+  margin: 8px 0;
+}
+
+.side-panel > .muted:first-of-type {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.side-panel h3 {
+  margin: 10px 0;
 }
 
 .panel-heading {
@@ -519,11 +554,11 @@ select {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin: 16px 0;
+  margin: 10px 0;
 }
 
 .metric-grid span {
-  min-height: 42px;
+  min-height: 38px;
   border: 1px solid #dbe5df;
   border-radius: 6px;
   display: flex;
@@ -537,13 +572,19 @@ select {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 10px;
+  margin-bottom: 8px;
 }
 
 .slot-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .slot-button {
@@ -663,7 +704,24 @@ th {
   }
 
   .sidebar {
+    position: static;
+    height: auto;
     min-height: auto;
+    overflow: visible;
+  }
+
+  .main {
+    height: auto;
+    overflow: visible;
+  }
+
+  .map-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  .map-workspace {
+    overflow: visible;
   }
 
   .map-canvas,
