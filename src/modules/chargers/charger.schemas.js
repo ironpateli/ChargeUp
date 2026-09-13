@@ -3,6 +3,16 @@ import { z } from 'zod';
 const latitude = z.coerce.number().min(-90).max(90);
 const longitude = z.coerce.number().min(-180).max(180);
 const connectorType = z.enum(['CCS2', 'TYPE_2', 'CHADEMO', 'GB_T', 'TESLA_NACS']);
+const dateOnly = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must use YYYY-MM-DD format')
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    return date.getUTCFullYear() === year
+      && date.getUTCMonth() === month - 1
+      && date.getUTCDate() === day;
+  }, 'date must be a valid calendar date');
 
 export const searchChargersSchema = z.object({
   query: z.object({
@@ -17,6 +27,15 @@ export const searchChargersSchema = z.object({
 export const getChargerSchema = z.object({
   params: z.object({
     chargerId: z.coerce.number().int().positive()
+  })
+});
+
+export const getChargerAvailabilitySchema = z.object({
+  params: z.object({
+    chargerId: z.coerce.number().int().positive()
+  }),
+  query: z.object({
+    date: dateOnly
   })
 });
 

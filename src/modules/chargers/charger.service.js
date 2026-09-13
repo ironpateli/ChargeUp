@@ -1,6 +1,18 @@
 import { query, withTransaction } from '../../shared/db.js';
 import { AppError, assertFound } from '../../shared/errors.js';
 
+const AVAILABILITY_TIME_ZONE_OFFSET = '+05:30';
+const AVAILABILITY_START_HOUR = 6;
+const AVAILABILITY_END_HOUR = 22;
+
+function toIsoAtLocalHour(date, hour) {
+  return `${date}T${String(hour).padStart(2, '0')}:00:00${AVAILABILITY_TIME_ZONE_OFFSET}`;
+}
+
+function rangesOverlap(firstStart, firstEnd, secondStart, secondEnd) {
+  return firstStart < secondEnd && secondStart < firstEnd;
+}
+
 export async function searchChargers(filters) {
   const result = await query(
     `
@@ -54,6 +66,83 @@ export async function getChargerById(chargerId) {
   const result = await findChargerById(query, chargerId);
 
   return assertFound(result.rows[0], 'Charger not found.');
+}
+
+export async function getChargerAvailability(chargerId, date) {
+  const chargerResult = await query(
+    `
+      SELECT id, status
+      FROM chargers
+      WHERE id = $1
+    `,
+    [chargerId]
+  );
+
+  const charger = chargerResult.rows[0];
+
+  if (!charger) {
+    throw new AppError('Charger not found.', 404, 'CHARGER_NOT_FOUND');
+  }
+
+  const dayStart = toIsoAtLocalHour(date, 0);
+  const nextDay = new Date(`${date}T00:00:00${AVAILABILITY_TIME_ZONE_OFFSET}`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const dayEnd = nextDay.toISOString();
+
+  const bookingsResult = await query(
+    `
+      SELECT starts_at, ends_at
+      FROM bookings
+      WHERE charger_id = $1
+        AND status = 'CONFIRMED'
+        AND starts_at < $3
+        AND ends_at > $2
+      ORDER BY starts_at ASC
+    `,
+    [chargerId, dayStart, dayEnd]
+  );
+
+  const bookedSlots = bookingsResult.rows.map((booking) => ({
+    startsAt: booking.starts_at,
+    endsAt: booking.ends_at
+  }));
+
+  const availableSlots = [];
+
+  if (charger.status === 'ACTIVE') {
+    const bookedRanges = bookedSlots.map((slot) => ({
+      startsAt: new Date(slot.startsAt),
+      endsAt: new Date(slot.endsAt)
+    }));
+
+    for (let hour = AVAILABILITY_START_HOUR; hour < AVAILABILITY_END_HOUR; hour += 1) {
+      const startsAt = new Date(toIsoAtLocalHour(date, hour));
+      const endsAt = new Date(toIsoAtLocalHour(date, hour + 1));
+      const isBooked = bookedRanges.some((slot) => (
+        rangesOverlap(startsAt, endsAt, slot.startsAt, slot.endsAt)
+      ));
+
+      if (!isBooked) {
+        availableSlots.push({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString()
+        });
+      }
+    }
+  }
+
+  return {
+    chargerId,
+    date,
+    slotMinutes: 60,
+    timeZone: 'Asia/Kolkata',
+    operatingHours: {
+      startsAt: toIsoAtLocalHour(date, AVAILABILITY_START_HOUR),
+      endsAt: toIsoAtLocalHour(date, AVAILABILITY_END_HOUR)
+    },
+    bookedSlots,
+    availableSlots
+  };
 }
 
 async function findChargerById(dbQuery, chargerId) {
