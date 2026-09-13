@@ -5,6 +5,10 @@ export function BookingsPage() {
   const [bookings, setBookings] = useState([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [clearingCancelled, setClearingCancelled] = useState(false);
+
+  const confirmedBookings = bookings.filter((booking) => booking.status !== 'CANCELLED');
+  const cancelledBookings = bookings.filter((booking) => booking.status === 'CANCELLED');
 
   async function loadBookings() {
     setError('');
@@ -33,6 +37,48 @@ export function BookingsPage() {
     }
   }
 
+  async function clearCancelledBookings() {
+    setError('');
+    setMessage('');
+    setClearingCancelled(true);
+
+    try {
+      const data = await apiRequest('/bookings/me/cancelled', { method: 'DELETE' });
+      setMessage(`Cleared ${data.deletedCount} cancelled booking${data.deletedCount === 1 ? '' : 's'}.`);
+      await loadBookings();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setClearingCancelled(false);
+    }
+  }
+
+  function renderBookingRows(sectionBookings, emptyMessage) {
+    if (!sectionBookings.length) {
+      return (
+        <tr>
+          <td colSpan="5">{emptyMessage}</td>
+        </tr>
+      );
+    }
+
+    return sectionBookings.map((booking) => (
+      <tr key={booking.id}>
+        <td>{booking.chargerName}</td>
+        <td>{new Date(booking.startsAt).toLocaleString()}</td>
+        <td>{new Date(booking.endsAt).toLocaleString()}</td>
+        <td><span className="status-pill">{booking.status}</span></td>
+        <td>
+          {booking.status === 'CONFIRMED' && (
+            <button className="danger-button" type="button" onClick={() => cancelBooking(booking.id)}>
+              Cancel
+            </button>
+          )}
+        </td>
+      </tr>
+    ));
+  }
+
   return (
     <section className="page-section">
       <div className="page-heading">
@@ -46,40 +92,60 @@ export function BookingsPage() {
       {error && <div className="form-error">{error}</div>}
       {message && <div className="form-success">{message}</div>}
 
-      <div className="table-card">
-        <table>
-          <thead>
-            <tr>
-              <th>Charger</th>
-              <th>Starts</th>
-              <th>Ends</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map((booking) => (
-              <tr key={booking.id}>
-                <td>{booking.chargerName}</td>
-                <td>{new Date(booking.startsAt).toLocaleString()}</td>
-                <td>{new Date(booking.endsAt).toLocaleString()}</td>
-                <td><span className="status-pill">{booking.status}</span></td>
-                <td>
-                  {booking.status === 'CONFIRMED' && (
-                    <button className="danger-button" type="button" onClick={() => cancelBooking(booking.id)}>
-                      Cancel
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {!bookings.length && (
+      <div className="booking-section-grid">
+        <div className="table-card booking-history-card">
+          <div className="section-heading-row">
+            <div>
+              <h2>Confirmed</h2>
+              <p>{confirmedBookings.length} non-cancelled booking{confirmedBookings.length === 1 ? '' : 's'}</p>
+            </div>
+          </div>
+          <table>
+            <thead>
               <tr>
-                <td colSpan="5">No bookings yet.</td>
+                <th>Charger</th>
+                <th>Starts</th>
+                <th>Ends</th>
+                <th>Status</th>
+                <th></th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {renderBookingRows(confirmedBookings, 'No confirmed or completed bookings.')}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="table-card booking-history-card">
+          <div className="section-heading-row">
+            <div>
+              <h2>Cancelled</h2>
+              <p>{cancelledBookings.length} cancelled booking{cancelledBookings.length === 1 ? '' : 's'}</p>
+            </div>
+            <button
+              className="danger-button"
+              type="button"
+              onClick={clearCancelledBookings}
+              disabled={!cancelledBookings.length || clearingCancelled}
+            >
+              {clearingCancelled ? 'Clearing...' : 'Clear cancelled'}
+            </button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Charger</th>
+                <th>Starts</th>
+                <th>Ends</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {renderBookingRows(cancelledBookings, 'No cancelled bookings.')}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );

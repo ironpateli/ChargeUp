@@ -129,7 +129,12 @@ export function OwnerPage({ user, refreshUser }) {
       {error && <div className="form-error">{error}</div>}
       {message && <div className="form-success">{message}</div>}
 
-      {!ownerProfile ? (
+      {user?.role === 'ADMIN' ? (
+        <div className="form-card">
+          <h2>Admin owner management</h2>
+          <p className="muted">Admins can create and manage multiple owner accounts from the Admin dashboard. This page is for a single charger owner managing their own chargers.</p>
+        </div>
+      ) : !ownerProfile ? (
         <form className="form-card" onSubmit={createOwnerProfile}>
           <h2>Request owner approval</h2>
           <p className="muted">An admin must approve your owner profile before you can list chargers.</p>

@@ -94,6 +94,20 @@ export async function getMyBookings(userId) {
   return result.rows.map(toBookingSummary);
 }
 
+export async function clearMyCancelledBookings(userId) {
+  const result = await query(
+    `
+      DELETE FROM bookings
+      WHERE user_id = $1
+        AND status = 'CANCELLED'
+      RETURNING id
+    `,
+    [userId]
+  );
+
+  return result.rowCount;
+}
+
 export async function createBooking(userId, input) {
   return withTransaction(async (client) => {
     assertBookableSlot(input.startsAt, input.endsAt);

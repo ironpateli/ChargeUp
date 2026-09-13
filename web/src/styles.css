@@ -694,6 +694,33 @@ select {
   overflow: auto;
 }
 
+.booking-section-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.booking-history-card {
+  display: grid;
+  gap: 14px;
+}
+
+.section-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.section-heading-row h2 {
+  margin: 0;
+}
+
+.section-heading-row p {
+  margin: 4px 0 0;
+  color: #5b6d63;
+  font-weight: 700;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

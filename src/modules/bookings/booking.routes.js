@@ -3,6 +3,7 @@ import { requireAuth } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import {
   cancelBooking,
+  clearMyCancelledBookings,
   createBooking,
   getMyBookings
 } from './booking.service.js';
@@ -17,6 +18,15 @@ bookingRouter.get('/me', requireAuth, async (req, res, next) => {
   try {
     const bookings = await getMyBookings(req.user.id);
     res.json({ data: { bookings } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+bookingRouter.delete('/me/cancelled', requireAuth, async (req, res, next) => {
+  try {
+    const deletedCount = await clearMyCancelledBookings(req.user.id);
+    res.json({ data: { deletedCount } });
   } catch (error) {
     next(error);
   }
