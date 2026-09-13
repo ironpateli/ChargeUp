@@ -287,6 +287,12 @@ select {
   align-items: center;
 }
 
+.action-cell {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .map-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;

@@ -293,7 +293,7 @@ export async function createCharger(userId, input) {
   return withTransaction(async (client) => {
     const ownerProfileResult = await client.query(
       `
-        SELECT id
+        SELECT id, verification_status
         FROM owner_profiles
         WHERE user_id = $1
       `,
@@ -304,6 +304,10 @@ export async function createCharger(userId, input) {
 
     if (!ownerProfile) {
       throw new AppError('Owner profile is required before listing chargers.', 403, 'OWNER_PROFILE_REQUIRED');
+    }
+
+    if (ownerProfile.verification_status !== 'VERIFIED') {
+      throw new AppError('Owner profile must be approved before listing chargers.', 403, 'OWNER_PROFILE_NOT_VERIFIED');
     }
 
     const chargerResult = await client.query(

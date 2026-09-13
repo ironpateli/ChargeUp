@@ -23,9 +23,13 @@ export function OwnerPage({ user, refreshUser }) {
   const [profileName, setProfileName] = useState('My Charging Business');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const isApprovedOwner = ownerProfile?.verificationStatus === 'VERIFIED' && user?.role === 'CHARGER_OWNER';
 
   async function loadOwnerData() {
     setError('');
+    setLoading(true);
 
     try {
       const profile = await apiRequest('/owner-profiles/me');
@@ -42,6 +46,8 @@ export function OwnerPage({ user, refreshUser }) {
     } catch {
       setChargers([]);
       setBookings([]);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -61,7 +67,7 @@ export function OwnerPage({ user, refreshUser }) {
       });
       setOwnerProfile(data.ownerProfile);
       await refreshUser();
-      setMessage('Owner profile created.');
+      setMessage('Owner request submitted. An admin must approve it before you can list chargers.');
       await loadOwnerData();
     } catch (err) {
       setError(err.message);
@@ -115,21 +121,38 @@ export function OwnerPage({ user, refreshUser }) {
           <h1>Owner dashboard</h1>
           <p>Create chargers, manage status, and view bookings.</p>
         </div>
-        <button className="secondary-button" type="button" onClick={loadOwnerData}>Refresh</button>
+        <button className="secondary-button" type="button" onClick={loadOwnerData} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
 
       {error && <div className="form-error">{error}</div>}
       {message && <div className="form-success">{message}</div>}
 
-      {!ownerProfile && user?.role !== 'CHARGER_OWNER' ? (
+      {!ownerProfile ? (
         <form className="form-card" onSubmit={createOwnerProfile}>
-          <h2>Become a charger owner</h2>
+          <h2>Request owner approval</h2>
+          <p className="muted">An admin must approve your owner profile before you can list chargers.</p>
           <label>
             Display name
             <input value={profileName} onChange={(event) => setProfileName(event.target.value)} />
           </label>
-          <button className="primary-button" type="submit">Create owner profile</button>
+          <button className="primary-button" type="submit">Submit request</button>
         </form>
+      ) : !isApprovedOwner ? (
+        <div className="form-card">
+          <h2>Owner request status</h2>
+          <p><span className="status-pill">{ownerProfile.verificationStatus}</span></p>
+          {ownerProfile.verificationStatus === 'PENDING_VERIFICATION' && (
+            <p className="muted">Your request is waiting for admin approval. You can create chargers after approval.</p>
+          )}
+          {ownerProfile.verificationStatus === 'REJECTED' && (
+            <p className="muted">Your owner request was rejected. We can add a reapply flow later if you want.</p>
+          )}
+          {ownerProfile.verificationStatus === 'SUSPENDED' && (
+            <p className="muted">This owner profile is suspended, so charger management is disabled.</p>
+          )}
+        </div>
       ) : (
         <div className="two-column">
           <form className="form-card" onSubmit={createCharger}>

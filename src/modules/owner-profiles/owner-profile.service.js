@@ -32,17 +32,6 @@ export async function createOwnerProfile(userId, input) {
         ]
       );
 
-      await client.query(
-        `
-          UPDATE users
-          SET role = 'CHARGER_OWNER',
-              updated_at = now()
-          WHERE id = $1
-            AND role = 'EV_USER'
-        `,
-        [userId]
-      );
-
       return toOwnerProfile(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
