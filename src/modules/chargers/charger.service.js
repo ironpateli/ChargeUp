@@ -41,13 +41,20 @@ export async function searchChargers(filters) {
           ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
           $3
         )
-        AND ($4::connector_type IS NULL OR EXISTS (
+        AND (
+          $4::text IS NULL
+          OR c.name ILIKE '%' || $4 || '%'
+          OR c.address_line_1 ILIKE '%' || $4 || '%'
+          OR c.city ILIKE '%' || $4 || '%'
+          OR c.state ILIKE '%' || $4 || '%'
+        )
+        AND ($5::connector_type IS NULL OR EXISTS (
           SELECT 1
           FROM charger_connector_types filter_cct
           WHERE filter_cct.charger_id = c.id
-            AND filter_cct.connector_type = $4
+            AND filter_cct.connector_type = $5
         ))
-        AND ($5::numeric IS NULL OR c.power_kw >= $5)
+        AND ($6::numeric IS NULL OR c.power_kw >= $6)
       GROUP BY c.id
       ORDER BY distance_meters ASC
       LIMIT 50
@@ -56,6 +63,7 @@ export async function searchChargers(filters) {
       filters.lat,
       filters.lng,
       filters.radiusMeters,
+      filters.q ?? null,
       filters.connectorType ?? null,
       filters.minPowerKw ?? null
     ]

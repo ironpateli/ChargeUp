@@ -20,6 +20,7 @@ export const searchChargersSchema = z.object({
     lat: latitude,
     lng: longitude,
     radiusMeters: z.coerce.number().int().positive().max(50000).default(5000),
+    q: z.string().trim().min(1).max(120).optional(),
     connectorType: connectorType.optional(),
     minPowerKw: z.coerce.number().positive().optional()
   })
