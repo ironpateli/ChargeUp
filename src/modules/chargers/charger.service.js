@@ -124,7 +124,7 @@ export async function getChargerAvailability(chargerId, date) {
         rangesOverlap(startsAt, endsAt, slot.startsAt, slot.endsAt)
       ));
 
-      if (!isBooked) {
+      if (!isBooked && startsAt > new Date()) {
         availableSlots.push({
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString()

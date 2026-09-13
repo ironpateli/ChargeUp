@@ -1,6 +1,11 @@
 import { query, withTransaction } from '../../shared/db.js';
 import { AppError } from '../../shared/errors.js';
 
+const BOOKING_TIME_ZONE_OFFSET_MINUTES = 330;
+const BOOKING_SLOT_MINUTES = 60;
+const BOOKING_START_HOUR = 6;
+const BOOKING_END_HOUR = 22;
+
 function toBookingSummary(row) {
   return {
     id: Number(row.id),
@@ -24,6 +29,47 @@ function toBooking(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function toBookingLocalParts(date) {
+  const localDate = new Date(date.getTime() + BOOKING_TIME_ZONE_OFFSET_MINUTES * 60 * 1000);
+
+  return {
+    hour: localDate.getUTCHours(),
+    minute: localDate.getUTCMinutes(),
+    second: localDate.getUTCSeconds(),
+    millisecond: localDate.getUTCMilliseconds()
+  };
+}
+
+function assertBookableSlot(startsAt, endsAt, now = new Date()) {
+  if (startsAt <= now) {
+    throw new AppError('Booking start time must be in the future.', 409, 'BOOKING_SLOT_IN_PAST');
+  }
+
+  const durationMinutes = (endsAt.getTime() - startsAt.getTime()) / (60 * 1000);
+
+  if (durationMinutes !== BOOKING_SLOT_MINUTES) {
+    throw new AppError('Bookings must use a 60-minute slot.', 422, 'INVALID_BOOKING_SLOT_DURATION');
+  }
+
+  const startsAtLocal = toBookingLocalParts(startsAt);
+  const endsAtLocal = toBookingLocalParts(endsAt);
+
+  const startsOnHour = startsAtLocal.minute === 0
+    && startsAtLocal.second === 0
+    && startsAtLocal.millisecond === 0;
+  const endsOnHour = endsAtLocal.minute === 0
+    && endsAtLocal.second === 0
+    && endsAtLocal.millisecond === 0;
+
+  if (!startsOnHour || !endsOnHour) {
+    throw new AppError('Bookings must start and end on an hourly slot boundary.', 422, 'INVALID_BOOKING_SLOT_BOUNDARY');
+  }
+
+  if (startsAtLocal.hour < BOOKING_START_HOUR || endsAtLocal.hour > BOOKING_END_HOUR) {
+    throw new AppError('Booking slot is outside charger operating hours.', 422, 'BOOKING_OUTSIDE_OPERATING_HOURS');
+  }
 }
 
 export async function getMyBookings(userId) {
@@ -50,6 +96,8 @@ export async function getMyBookings(userId) {
 
 export async function createBooking(userId, input) {
   return withTransaction(async (client) => {
+    assertBookableSlot(input.startsAt, input.endsAt);
+
     const chargerResult = await client.query(
       `
         SELECT id, status
