@@ -140,6 +140,26 @@ npm run dev
 
 The API starts on `http://localhost:4000`.
 
+## Demo Seed
+
+After running migrations, seed demo data with:
+
+```bash
+npm run db:seed
+```
+
+Demo accounts use this password:
+
+```text
+StrongPass123
+```
+
+```text
+admin@chargeup.test
+owner@chargeup.test
+user@chargeup.test
+```
+
 ## Migrations
 
 Database migrations are version-controlled changes to the database schema.
