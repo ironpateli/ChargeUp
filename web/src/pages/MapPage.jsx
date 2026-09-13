@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Calendar, CheckCircle2, IndianRupee, LocateFixed, MapPin, RefreshCw, Search, Zap } from 'lucide-react';
+import { Calendar, CheckCircle2, IndianRupee, LocateFixed, MapPin, RefreshCw, Search, X, Zap } from 'lucide-react';
 import { apiRequest } from '../api.js';
 
 const MUMBAI_CENTER = [19.076, 72.8777];
@@ -93,6 +93,7 @@ export function MapPage() {
   const [loading, setLoading] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [isResultsOpen, setIsResultsOpen] = useState(true);
 
   const selectedPosition = useMemo(() => (
     selected ? [selected.latitude, selected.longitude] : center
@@ -357,10 +358,28 @@ export function MapPage() {
       {searchMessage && <div className="inline-notice"><CheckCircle2 size={16} /> {searchMessage}</div>}
 
       <div className="map-workspace">
-        <aside className="search-results-panel">
+        <button
+          className="results-toggle"
+          type="button"
+          onClick={() => setIsResultsOpen((isOpen) => !isOpen)}
+        >
+          <MapPin size={16} />
+          Stations
+          <span>{chargers.length}</span>
+        </button>
+
+        <aside className={`search-results-panel ${isResultsOpen ? 'is-open' : 'is-collapsed'}`}>
           <div className="panel-heading">
             <h2>Stations</h2>
-            <span className="status-pill">{chargers.length}</span>
+            <button
+              className="icon-button panel-close-button"
+              type="button"
+              aria-label="Hide station list"
+              onClick={() => setIsResultsOpen(false)}
+              title="Hide station list"
+            >
+              <X size={16} />
+            </button>
           </div>
           <label className="station-picker">
             Choose station
@@ -419,7 +438,7 @@ export function MapPage() {
               key={charger.id}
               position={[charger.latitude, charger.longitude]}
               icon={chargerIcon}
-              eventHandlers={{ click: () => setSelected(charger) }}
+            eventHandlers={{ click: () => setSelected(charger) }}
             >
               <Popup>{charger.name}</Popup>
             </Marker>
@@ -431,18 +450,28 @@ export function MapPage() {
           )}
         </MapContainer>
 
-        <aside className="side-panel">
-          {!selected ? (
-            <div className="empty-state">
-              <Zap size={30} />
-              <h2>Select a charger</h2>
-              <p>{loading ? 'Loading stations...' : 'Click a map marker to check availability and book a slot.'}</p>
-            </div>
-          ) : (
+        {!selected ? (
+          <div className="map-empty-hint">
+            <Zap size={18} />
+            <span>{loading ? 'Loading stations...' : 'Select a marker or station to check slots.'}</span>
+          </div>
+        ) : (
+          <aside className="side-panel map-details-drawer">
             <>
               <div className="panel-heading">
                 <h2>{selected.name}</h2>
-                <span className="status-pill">{selected.status}</span>
+                <div className="panel-heading-actions">
+                  <span className="status-pill">{selected.status}</span>
+                  <button
+                    className="icon-button panel-close-button"
+                    type="button"
+                    aria-label="Close charger details"
+                    onClick={() => setSelected(null)}
+                    title="Close charger details"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
               <p className="muted">{selected.addressLine1}, {selected.city}</p>
               <div className="metric-grid">
@@ -481,8 +510,8 @@ export function MapPage() {
                 )) : <p className="muted">No slots available for this date.</p>}
               </div>
             </>
-          )}
-        </aside>
+          </aside>
+        )}
       </div>
 
       {pendingSlot && selected && (
