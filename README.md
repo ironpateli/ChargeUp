@@ -1,134 +1,218 @@
 # ChargeUp
 
-ChargeUp is an EV charger discovery and booking platform.
+ChargeUp is an EV charger discovery, booking, and owner-management platform.
 
-The learning goal is to build a realistic backend with JavaScript, Node.js, Express, PostgreSQL, PostGIS, DBMS constraints, and system-design thinking.
+The project is being built as a learning-focused full-stack system using JavaScript, Node.js, Express, PostgreSQL, PostGIS, DBMS constraints, React, and system-design thinking.
 
-## Initial Architecture
+## Current Architecture
 
 ```text
-Client App
-  - Web/mobile UI
-  - Map view
-  - Booking flow
+React Web Client
+  - Login/register
+  - Map-based charger search
+  - Charger list and filters
+  - Availability and booking flow
+  - Booking history
   - Owner dashboard
+  - Admin dashboard
 
-API Layer
-  - Express app
+Express API
   - Auth middleware
+  - Role-based authorization
   - Request validation
-  - Rate limiting later
+  - Domain routes and services
+  - Central error handling
 
 Domain Modules
   - Auth
-  - Users
+  - Owner profiles
   - Chargers
-  - Search
-  - Availability
+  - Search and availability
   - Bookings
-  - Payments later
-  - Reviews later
-  - Admin later
+  - Reviews
+  - Admin controls
 
 Data Layer
   - PostgreSQL
   - PostGIS for location search
+  - pg_trgm for text search support
   - Exclusion constraints for booking conflicts
-  - Owner profiles
-  - Normalized charger connector relationships with enum values
+  - Normalized charger connector relationships
 ```
 
 ## Architecture Choices
 
 ### Backend
 
-Start with a modular monolith. One Express app is easier to build, debug, and deploy while still allowing clean internal boundaries.
+ChargeUp currently uses a modular monolith: one Express application split into domain modules.
 
-Microservices are not useful yet because the project does not have independent teams, heavy traffic, or separate deployment needs.
+This is the right first architecture because it is easier to build, debug, test, and understand while still teaching real production ideas such as authorization, transactions, validation, schema design, and consistency.
+
+Possible future services:
+
+- Search service
+- Booking service
+- Payment service
+- Notification service
+
+These should be split only when traffic, deployment needs, or team ownership make that complexity useful.
 
 ### Database
 
-Use PostgreSQL with PostGIS.
+ChargeUp uses PostgreSQL with PostGIS.
 
-PostgreSQL is enough for the first version because ChargeUp's search is mostly structured:
+PostgreSQL is enough for the current version because most search is structured:
 
 - nearby chargers
 - connector type
-- charging speed
+- charger status
 - price
+- charging speed
 - availability
-- verified status
+- owner/admin filters
 
-Elasticsearch is useful later if we add heavy text search, typo-tolerant search, complex ranking, or autocomplete across large station datasets.
+Elasticsearch can be added later if the project needs very advanced fuzzy search, autocomplete at large scale, natural-language search, or complex ranking.
 
 ### Payments
 
-Use a provider abstraction.
+Payments are not implemented yet.
 
-For India-facing payments, Razorpay is a practical first provider. Stripe can be added later behind the same interface, but new Stripe accounts in India are currently invite-only.
+The planned approach is:
 
-For the MVP, use a mock payment provider first so booking and payment state transitions are easy to test.
+1. Add a mock payment provider first.
+2. Add payment tables and state transitions.
+3. Integrate Razorpay for India-facing payments.
+4. Keep Stripe possible later through a provider abstraction.
 
-## Functional Requirements
+The booking module should not directly depend on Razorpay or Stripe. It should depend on an internal payment service/provider interface.
 
-- Users can register and log in.
-- Users can search nearby EV chargers.
-- Users can view charger details.
-- Users can check availability.
-- Users can book a fixed time slot.
-- Users can cancel a booking.
-- Owners can list chargers.
-- Owners can define charger metadata and availability.
+## Implemented Features
+
+### Authentication and Authorization
+
+- User registration.
+- User login.
+- JWT access tokens.
+- Password hashing with bcrypt.
+- Current user endpoint.
+- Role-based authorization.
+- Roles:
+  - `EV_USER`
+  - `CHARGER_OWNER`
+  - `ADMIN`
+
+### Validation and Error Handling
+
+- Zod request validation.
+- Field-level validation messages.
+- Frontend displays useful errors such as `Email: Enter a valid email address.`
+- Central Express error handler.
+- Not-found handler.
+- Booking conflict errors mapped from PostgreSQL exclusion constraints.
+
+### Charger Search and Map
+
+- Map interface using Leaflet.
+- Default map location set to Mumbai.
+- User location marker when browser location access is allowed.
+- Search chargers by nearby location.
+- Search by name/location text.
+- Filter by connector type.
+- Filter active chargers.
+- Sort by nearest, fastest, and cheapest.
+- Charger result list alongside the map.
+- Charger marker selection.
+- Charger details and availability view.
+
+### Charger Management
+
+- Owners can create chargers after owner approval.
+- Owners can update charger details.
+- Owners can activate or deactivate their chargers.
+- Admins can view and control chargers across the system.
+- Admins can verify chargers.
+- Admins can activate, deactivate, or suspend chargers.
+
+### Booking
+
+- Users can book fixed time slots.
+- Users can cancel bookings.
+- Booked slots are shown as unavailable.
+- Past dates and invalid time slots are rejected.
+- Expired confirmed bookings automatically move to `COMPLETED`.
+- Booking history is split into:
+  - confirmed
+  - completed
+  - cancelled
+- Users can clear cancelled booking history.
+- Users can clear completed booking history.
+
+### Owner Flow
+
+- Users can request an owner profile.
+- Admin approval is required before a normal user becomes a charger owner.
+- Owners can view their chargers.
 - Owners can view bookings for their chargers.
-- Admins can verify chargers later.
 
-## Non-Functional Requirements
+### Admin Dashboard
 
-- Prevent double bookings.
-- Keep nearby search fast.
-- Keep booking state consistent.
-- Keep authentication secure.
-- Make the codebase modular and extensible.
-- Add observability later with logs, metrics, and traces.
+- Admins can view pending owner requests.
+- Admins can approve or reject owner requests.
+- Admins can suspend or restore owners.
+- Admins can create owner accounts directly.
+- Admins can view all owners.
+- Admins can view all chargers.
+- Admin lists support search, sorting, filtering, and internal scrolling.
 
-## Booking Consistency
+### Reviews
 
-The first version should use confirm-on-submit:
+- Users can create reviews.
+- Charger reviews can be listed.
+- Review cleanup is handled when completed booking history is cleared.
 
-1. User views availability.
-2. User submits booking request.
-3. Backend opens a database transaction.
-4. PostgreSQL checks that no confirmed booking overlaps the requested time range.
-5. Booking is created or rejected.
+## Current API Areas
 
-Later, when real payments are added, use temporary holds:
+```text
+GET    /health
 
-1. User selects a slot.
-2. Backend creates a short-lived hold.
-3. User completes payment.
-4. Hold becomes a confirmed booking.
-5. Expired holds are released.
+POST   /auth/register
+POST   /auth/login
+GET    /auth/me
 
-## PostGIS In One Minute
+POST   /owner-profiles
+GET    /owner-profiles/me
 
-PostGIS adds geospatial types and indexes to PostgreSQL.
+GET    /owner/bookings
+GET    /owner/chargers
 
-Instead of storing only plain latitude and longitude numbers, we store a generated `geography(Point, 4326)` value.
+GET    /chargers
+GET    /chargers/:chargerId
+GET    /chargers/:chargerId/availability
+POST   /chargers
+PATCH  /chargers/:chargerId
+PATCH  /chargers/:chargerId/status
 
-That lets PostgreSQL answer questions like:
+GET    /bookings/me
+POST   /bookings
+PATCH  /bookings/:bookingId/cancel
+DELETE /bookings/me/cancelled
+DELETE /bookings/me/completed
 
-```sql
-SELECT *
-FROM chargers
-WHERE ST_DWithin(location, ST_MakePoint(77.5946, 12.9716)::geography, 5000)
-ORDER BY ST_Distance(location, ST_MakePoint(77.5946, 12.9716)::geography);
+POST   /reviews
+GET    /reviews/chargers/:chargerId
+
+GET    /admin/owner-profiles
+POST   /admin/owner-profiles
+GET    /admin/owner-profiles/pending
+PATCH  /admin/owner-profiles/:ownerProfileId/approve
+PATCH  /admin/owner-profiles/:ownerProfileId/reject
+PATCH  /admin/owner-profiles/:ownerProfileId/suspend
+PATCH  /admin/owner-profiles/:ownerProfileId/restore
+GET    /admin/chargers
+GET    /admin/chargers/pending
+PATCH  /admin/chargers/:chargerId/verify
+PATCH  /admin/chargers/:chargerId/status
 ```
-
-Meaning:
-
-- find chargers within 5 km
-- sort closest first
-- use a spatial index instead of scanning every row
 
 ## Run Locally
 
@@ -136,7 +220,8 @@ Meaning:
 
 ```bash
 npm install
-cp .env.example .env
+npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
@@ -147,12 +232,18 @@ The API starts on `http://localhost:4000`.
 ```bash
 cd web
 npm install
-cp .env.example .env
+npm run dev
+```
+
+For a production build preview:
+
+```bash
+cd web
 npm run build
 npm run preview
 ```
 
-The React app preview starts on `http://127.0.0.1:4173`.
+The preview starts on `http://127.0.0.1:4173`.
 
 ## Demo Seed
 
@@ -178,14 +269,36 @@ user@chargeup.test
 
 Database migrations are version-controlled changes to the database schema.
 
-For example:
+Current migrations:
 
 ```text
 001_initial_schema.sql
-002_add_payments.sql
-003_add_reviews.sql
+002_create_reviews.sql
+003_enable_trigram_search.sql
 ```
 
 Each migration is applied once and recorded in the `schema_migrations` table.
 
-Because this project is still at draft zero, we can edit `001_initial_schema.sql` directly. After a database is shared, deployed, or contains useful data, we should create a new migration instead of rewriting an old one.
+Because this project is still in active learning/development, early schema changes may still be adjusted directly. Once the database is shared, deployed, or contains important data, new schema changes should be added as new migration files instead of rewriting old migrations.
+
+## Important Missing Features
+
+- Payment gateway integration.
+- Mock payment provider.
+- Razorpay integration.
+- Payment webhooks and signature verification.
+- Temporary booking holds before payment confirmation.
+- Refund handling.
+- Owner payout tracking.
+- Email/SMS notifications.
+- Forgot password and reset password.
+- Refresh tokens or stronger session management.
+- Rate limiting.
+- Audit logs for admin actions.
+- Owner-defined weekly availability schedules.
+- Charger maintenance/unavailable blocks.
+- Import flow for external charger datasets.
+- Automated backend and frontend tests.
+- API documentation.
+- Production deployment.
+- UI/UX polish and mobile responsiveness pass.

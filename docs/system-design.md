@@ -4,10 +4,11 @@
 
 ChargeUp is a marketplace and booking system for EV chargers.
 
-It has two sides:
+It has three main actors:
 
 - EV users who need to find and book charging.
 - Charger owners who want to rent out private chargers.
+- Admins who manage trust, verification, and system-level control.
 
 ## 2. Functional Requirements
 
@@ -15,117 +16,189 @@ It has two sides:
 
 - Register and log in.
 - Search chargers near a location.
-- Filter chargers by connector type, price, speed, and availability.
+- Search chargers by name, location text, and connector type.
+- Filter chargers by active status and connector type.
+- Sort chargers by nearest, fastest, or cheapest.
+- View chargers on a map.
 - View charger details.
+- Check charger availability.
 - Book a fixed time slot.
 - Cancel a booking.
 - View booking history.
+- Separate confirmed, completed, and cancelled bookings.
+- Clear completed or cancelled booking history.
+- Create and view charger reviews.
 
 ### Owner Features
 
-- Register as an owner.
-- List a charger.
-- Set charger location, connector types, speed, price, and availability.
-- View upcoming bookings.
+- Request an owner profile.
+- Wait for admin approval before listing chargers.
+- List a charger after approval.
+- Set charger location, connector types, speed, price, and status.
+- Update charger details.
+- Activate or deactivate owned chargers.
+- View bookings for owned chargers.
 
-### Admin Features Later
+### Admin Features
 
+- View pending owner profile requests.
+- Approve owner requests.
+- Reject owner requests.
+- Suspend owners.
+- Restore suspended owners.
+- Create owner accounts directly.
+- View all owner profiles.
+- View all chargers.
 - Verify charger listings.
-- Suspend suspicious chargers or users.
-- Resolve disputes.
+- Activate, deactivate, or suspend chargers.
+- Search, sort, and filter admin lists.
 
 ## 3. Non-Functional Requirements
 
 ### Consistency
 
-A charger must not be double-booked for overlapping time ranges.
+A charger must not be double-booked for overlapping confirmed time ranges.
+
+The database enforces this with a PostgreSQL exclusion constraint on:
+
+```text
+charger_id + booked_range
+```
+
+This makes PostgreSQL the final authority even if two users try to book the same slot at almost the same time.
 
 ### Availability
 
-Search should continue working even if optional systems like payments or notifications are unavailable.
+Core search should continue working even if optional systems such as payments, notifications, or analytics are unavailable.
 
 ### Low Latency
 
-Nearby search should return quickly. Users expect map interactions to feel responsive.
+Map search and filters should feel responsive. Nearby search uses PostGIS and indexes instead of scanning every charger row manually.
 
 ### Scalability
 
-The design should scale from one city to many cities without rewriting the whole backend.
+The current design should scale from one city to multiple cities without rewriting the whole backend.
+
+Scaling steps later:
+
+- Add pagination.
+- Add caching for common searches.
+- Add read replicas.
+- Split search/payment/notification services only if needed.
 
 ### Security
 
-Users should only modify their own bookings. Owners should only modify their own chargers.
+- Users should only modify their own bookings.
+- Owners should only modify their own chargers.
+- Admins can manage system-wide owner and charger data.
+- Passwords are hashed with bcrypt.
+- API access is protected using JWT access tokens.
+- Request bodies are validated before service logic runs.
 
 ### Extensibility
 
-Payments, notifications, dynamic pricing, and charger IoT status should be addable later.
+Payments, notifications, payout logic, dynamic pricing, IoT charger status, and real-world charger dataset imports should be addable without rewriting the core modules.
 
 ## 4. High-Level Architecture
 
 ```text
-Web or Mobile Client
-        |
-        v
+React Client
+  |
+  v
 Express API
-        |
-        v
-Domain Modules
-        |
-        v
+  |
+  v
+Domain Services
+  |
+  v
 PostgreSQL + PostGIS
 ```
 
-For the portfolio version, this is enough:
+More detailed view:
 
 ```text
-React Client later
-        |
-        v
-Node.js + Express modular monolith
-        |
-        v
-PostgreSQL + PostGIS
+Browser
+  - React
+  - React Router
+  - Leaflet map
+  - Shared API client
+
+Express App
+  - helmet
+  - cors
+  - express.json
+  - morgan
+  - auth middleware
+  - validation middleware
+  - error handling middleware
+
+Modules
+  - auth
+  - owner-profiles
+  - owner
+  - chargers
+  - bookings
+  - reviews
+  - admin
+
+Database
+  - PostgreSQL
+  - PostGIS
+  - pg_trgm
+  - GiST indexes
+  - relational constraints
 ```
 
 ## 5. Why Modular Monolith First
 
-A modular monolith means one deployable backend with clean folders and boundaries.
+A modular monolith means one deployable backend with clean internal folders and boundaries.
 
 Benefits:
 
 - Easier to build.
 - Easier to debug.
 - Easier to test.
+- Easier to understand while learning.
 - Still demonstrates real system design.
 - Can be split into services later if traffic or team size demands it.
 
+Do not start with microservices here. They add distributed-system complexity before the project needs it.
+
 Possible future services:
 
-- Search service
-- Booking service
-- Payment service
-- Notification service
+- Search service.
+- Booking service.
+- Payment service.
+- Notification service.
+- Admin/audit service.
 
-Do not start with microservices. They add distributed-system complexity before the project needs it.
+## 6. Current Data Model
 
-## 5.1 Normalized Core Data Model
-
-The initial schema separates login identity from charger ownership:
+The schema separates account identity from charger ownership:
 
 ```text
 users
-  account and authentication data
+  account, auth, and role data
 
 owner_profiles
   owner display identity, verification state, and payout reference
 
 chargers
   physical charger listing
+
+charger_connector_types
+  normalized connector relationship
+
+bookings
+  user reservations for charger time slots
+
+reviews
+  user feedback for chargers
 ```
 
 This means a user account can become an owner by creating an owner profile. The charger belongs to the owner profile, not directly to the user account.
 
-Connector types use a normalized join table while still using an enum:
+Connector types use a normalized join table while still using a PostgreSQL enum:
 
 ```text
 connector_type enum
@@ -136,64 +209,50 @@ charger_connector_types
   connector_type
 ```
 
-This avoids storing arrays inside `chargers`, so the relationship is normalized. It also avoids a separate connector lookup table for now, because PostgreSQL validates allowed connector names through the enum.
+This avoids storing connector arrays inside `chargers`, so the relationship stays normalized. It also avoids a separate connector lookup table for now because PostgreSQL validates allowed connector names through the enum.
 
 If the project later needs connector metadata such as max power, icon, region, or compatibility notes, this can be migrated into a full `connector_types` lookup table.
 
-## 6. Payment Gateway Decision
-
-For MVP:
-
-- Use a mock payment provider.
-- Store payment records and webhook-like state transitions.
-- Learn payment architecture without needing real money movement.
-
-For India production:
-
-- Prefer Razorpay first.
-
-For international production:
-
-- Stripe is excellent, but new Stripe accounts in India are invite-only at the time of writing.
-
-Design rule:
-
-```text
-Booking module should not directly depend on Razorpay or Stripe.
-Booking module depends on a PaymentProvider interface.
-```
-
-## 7. Search Decision
+## 7. Search Design
 
 Use PostgreSQL + PostGIS first.
 
 This is enough for:
 
-- radius search
-- distance sorting
-- city filtering
-- connector filtering
-- price filtering
-- availability filtering
+- Radius search.
+- Nearest-first sorting.
+- City/state/address filtering.
+- Connector filtering.
+- Status filtering.
+- Price filtering.
+- Speed filtering.
+- Availability checks.
+- Basic fuzzy text search with `pg_trgm`.
 
-Use Elasticsearch later only if we need:
+Elasticsearch can be added later only if needed for:
 
-- typo-tolerant search
-- natural-language station search
-- very advanced ranking
-- autocomplete over large text-heavy datasets
-- logs or analytics search
+- Large-scale autocomplete.
+- Typo-tolerant ranking.
+- Natural-language station search.
+- Advanced relevance scoring.
+- Analytics/log search.
 
 ## 8. How PostGIS Optimizes Search
 
-Normal latitude/longitude columns are just numbers. PostgreSQL can store them, but it does not automatically understand distance.
+Normal latitude and longitude columns are just numbers. PostgreSQL can store them, but it does not automatically understand distance.
 
 PostGIS adds spatial types and spatial indexes.
 
 For ChargeUp:
 
 ```text
-charger.location = geography(Point, 4326)
+chargers.location = geography(Point, 4326)
+```
+
+The generated location column is built from:
+
+```text
+longitude, latitude
 ```
 
 Then we create a GiST index:
@@ -202,67 +261,130 @@ Then we create a GiST index:
 CREATE INDEX chargers_location_gix ON chargers USING GIST (location);
 ```
 
-Now this query can use the spatial index:
+This allows queries such as:
 
 ```sql
 WHERE ST_DWithin(location, user_point, radius_meters)
+ORDER BY ST_Distance(location, user_point)
 ```
 
-That avoids checking every charger one by one.
+Meaning:
 
-Connector filtering uses the `charger_connector_types` join table:
+- Find chargers within a radius.
+- Sort closest first.
+- Use a spatial index where possible.
 
-```sql
-CREATE INDEX charger_connector_types_connector_type_idx
-  ON charger_connector_types(connector_type);
-```
+## 9. Booking Consistency
 
-This lets PostgreSQL quickly find charger IDs that support a requested connector type.
+The current version uses confirm-on-submit:
 
-## 9. Booking Consistency Options
+1. User views availability.
+2. User submits a booking request.
+3. Backend validates the requested slot.
+4. Backend inserts the booking.
+5. PostgreSQL rejects the insert if the same charger already has an overlapping confirmed booking.
 
-### Option A: Check Then Insert
-
-Backend checks for an overlapping booking before inserting.
-
-Simple, but unsafe under high concurrency unless done carefully inside a transaction.
-
-### Option B: Row Locking
-
-Lock the charger row while booking.
-
-Works, but can reduce concurrency because unrelated future time slots for the same charger may wait behind each other.
-
-### Option C: PostgreSQL Exclusion Constraint
-
-Let the database reject overlapping time ranges for the same charger.
-
-This is the best first serious design.
-
-Concept:
+The key database rule is:
 
 ```text
 For the same charger_id, confirmed booking time ranges must not overlap.
 ```
 
-The database becomes the final authority. Even if two API requests arrive at the same millisecond, one succeeds and the other fails.
+Cancelled and completed bookings do not block future slots.
 
-## 10. MVP Scope
+Expired confirmed bookings are automatically moved to `COMPLETED` when booking-related reads run.
 
-Build first:
+## 10. Payment Gateway Plan
 
-- Auth
-- Charger listing
-- Nearby charger search
-- Booking creation
-- Booking cancellation
-- Owner booking view
+Payments are intentionally not implemented yet.
 
-Build later:
+The recommended sequence is:
 
-- Payments
-- Reviews
-- Admin verification
-- Notifications
-- Dynamic pricing
-- Temporary holds
+1. Add a `payments` table.
+2. Add payment statuses such as `PENDING`, `AUTHORIZED`, `CAPTURED`, `FAILED`, `REFUNDED`.
+3. Create a mock payment provider.
+4. Change booking creation to create a short-lived hold instead of immediate confirmation.
+5. Confirm booking only after payment succeeds.
+6. Add webhook handling.
+7. Replace or supplement the mock provider with Razorpay.
+
+For India-facing production, Razorpay is the practical first real provider.
+
+For international expansion, Stripe can be added later through the same internal payment-provider interface.
+
+Design rule:
+
+```text
+Booking logic should not directly depend on Razorpay or Stripe SDKs.
+```
+
+Instead:
+
+```text
+Booking service -> Payment service -> Payment provider implementation
+```
+
+## 11. Current MVP Status
+
+Implemented:
+
+- Auth.
+- Role-based access.
+- Owner profile approval flow.
+- Charger listing.
+- Charger search.
+- Map UI.
+- Availability slots.
+- Booking creation.
+- Booking cancellation.
+- Booking completion.
+- Booking history cleanup.
+- Owner dashboard.
+- Admin dashboard.
+- Reviews.
+- Friendly validation errors.
+
+Not implemented yet:
+
+- Payments.
+- Payment holds.
+- Webhooks.
+- Notifications.
+- Payouts.
+- Audit logs.
+- Full automated tests.
+- Production deployment.
+
+## 12. Roadmap
+
+### Next Backend Features
+
+- Mock payment gateway.
+- Payment schema and service.
+- Temporary booking holds.
+- Razorpay integration.
+- Webhook idempotency.
+- Notification service.
+- Forgot password flow.
+- Rate limiting.
+- Audit logs.
+- Automated API tests.
+
+### Next Frontend Features
+
+- Payment screen.
+- Payment success/failure states.
+- Better review UI.
+- Admin audit views.
+- Cleaner owner availability schedule editor.
+- Mobile responsiveness polish.
+- UI/UX pass for empty states and loading states.
+
+### Next Data Features
+
+- Owner-defined weekly availability.
+- Charger maintenance blocks.
+- Import external charger datasets.
+- Better fuzzy search ranking.
+- Pagination for large lists.
+- Search result caching.
