@@ -70,6 +70,10 @@ function toBooking(row) {
   };
 }
 
+export function toPublicBooking(row) {
+  return toBooking(row);
+}
+
 function toBookingLocalParts(date) {
   const localDate = new Date(date.getTime() + BOOKING_TIME_ZONE_OFFSET_MINUTES * 60 * 1000);
 
@@ -137,7 +141,36 @@ export async function markExpiredConfirmedBookingsCompleted() {
   return result.rowCount;
 }
 
+export async function expirePendingPaymentBookings() {
+  const result = await query(
+    `
+      UPDATE bookings b
+      SET status = 'CANCELLED',
+          updated_at = now()
+      FROM payments p
+      WHERE p.booking_id = b.id
+        AND b.status = 'PENDING_PAYMENT'
+        AND p.status = 'PENDING'
+        AND p.expires_at <= now()
+      RETURNING b.id
+    `
+  );
+
+  await query(
+    `
+      UPDATE payments
+      SET status = 'FAILED',
+          updated_at = now()
+      WHERE status = 'PENDING'
+        AND expires_at <= now()
+    `
+  );
+
+  return result.rowCount;
+}
+
 export async function getMyBookings(userId) {
+  await expirePendingPaymentBookings();
   await markExpiredConfirmedBookingsCompleted();
 
   const result = await query(
@@ -273,7 +306,7 @@ export async function createBooking(userId, input) {
             SELECT 1
             FROM bookings b
             WHERE b.charger_unit_id = cu.id
-              AND b.status = 'CONFIRMED'
+              AND b.status IN ('CONFIRMED', 'PENDING_PAYMENT')
               AND b.starts_at < $3
               AND b.ends_at > $2
           )
@@ -313,6 +346,122 @@ export async function createBooking(userId, input) {
   });
 }
 
+export async function createPendingPaymentBooking(client, userId, input) {
+  assertBookableSlot(input.startsAt, input.endsAt, input.rule);
+
+  const unitResult = await client.query(
+    `
+      SELECT cu.id, cu.unit_number
+      FROM charger_units cu
+      WHERE cu.charger_id = $1
+        AND cu.status = 'ACTIVE'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM bookings b
+          WHERE b.charger_unit_id = cu.id
+            AND b.status IN ('CONFIRMED', 'PENDING_PAYMENT')
+            AND b.starts_at < $3
+            AND b.ends_at > $2
+        )
+      ORDER BY cu.unit_number ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    `,
+    [input.chargerId, input.startsAt, input.endsAt]
+  );
+
+  const unit = unitResult.rows[0];
+
+  if (!unit) {
+    throw new AppError('No charging unit is available for this time slot.', 409, 'BOOKING_SLOT_CONFLICT');
+  }
+
+  const bookingResult = await client.query(
+    `
+      INSERT INTO bookings (
+        user_id,
+        charger_id,
+        charger_unit_id,
+        starts_at,
+        ends_at,
+        status
+      )
+      VALUES ($1, $2, $3, $4, $5, 'PENDING_PAYMENT')
+      RETURNING *
+    `,
+    [userId, input.chargerId, unit.id, input.startsAt, input.endsAt]
+  );
+
+  return {
+    ...bookingResult.rows[0],
+    unit_number: unit.unit_number
+  };
+}
+
+export async function confirmPendingBooking(client, bookingId) {
+  const result = await client.query(
+    `
+      UPDATE bookings b
+      SET status = 'CONFIRMED',
+          updated_at = now()
+      WHERE b.id = $1
+        AND b.status = 'PENDING_PAYMENT'
+      RETURNING b.*
+    `,
+    [bookingId]
+  );
+
+  if (!result.rows[0]) {
+    throw new AppError('Pending booking not found.', 404, 'PENDING_BOOKING_NOT_FOUND');
+  }
+
+  const unitResult = await client.query(
+    `
+      SELECT unit_number
+      FROM charger_units
+      WHERE id = $1
+    `,
+    [result.rows[0].charger_unit_id]
+  );
+
+  return toBooking({
+    ...result.rows[0],
+    unit_number: unitResult.rows[0]?.unit_number
+  });
+}
+
+export async function failPendingBooking(client, bookingId) {
+  const result = await client.query(
+    `
+      UPDATE bookings
+      SET status = 'CANCELLED',
+          updated_at = now()
+      WHERE id = $1
+        AND status = 'PENDING_PAYMENT'
+      RETURNING *
+    `,
+    [bookingId]
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  const unitResult = await client.query(
+    `
+      SELECT unit_number
+      FROM charger_units
+      WHERE id = $1
+    `,
+    [result.rows[0].charger_unit_id]
+  );
+
+  return toBooking({
+    ...result.rows[0],
+    unit_number: unitResult.rows[0]?.unit_number
+  });
+}
+
 export async function cancelBooking(userId, bookingId) {
   return withTransaction(async (client) => {
     const existingResult = await client.query(
@@ -332,8 +481,8 @@ export async function cancelBooking(userId, bookingId) {
       throw new AppError('Booking not found.', 404, 'BOOKING_NOT_FOUND');
     }
 
-    if (existingBooking.status !== 'CONFIRMED') {
-      throw new AppError('Only confirmed bookings can be cancelled.', 409, 'BOOKING_NOT_CANCELLABLE');
+    if (existingBooking.status !== 'CONFIRMED' && existingBooking.status !== 'PENDING_PAYMENT') {
+      throw new AppError('Only active bookings can be cancelled.', 409, 'BOOKING_NOT_CANCELLABLE');
     }
 
     const result = await client.query(
@@ -346,6 +495,19 @@ export async function cancelBooking(userId, bookingId) {
       `,
       [bookingId]
     );
+
+    if (existingBooking.status === 'PENDING_PAYMENT') {
+      await client.query(
+        `
+          UPDATE payments
+          SET status = 'FAILED',
+              updated_at = now()
+          WHERE booking_id = $1
+            AND status = 'PENDING'
+        `,
+        [bookingId]
+      );
+    }
 
     return toBooking({
       ...result.rows[0],

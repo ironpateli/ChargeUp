@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { Calendar, CheckCircle2, IndianRupee, LocateFixed, MapPin, RefreshCw, Search, X, Zap } from 'lucide-react';
 import { apiRequest } from '../api.js';
 import { formatConnectorTypes, formatDistanceKm } from '../formatters.js';
+import { startPaymentCheckout } from '../payments.js';
 
 const MUMBAI_CENTER = [19.076, 72.8777];
 
@@ -267,15 +268,12 @@ export function MapPage() {
     setBookingLoading(true);
 
     try {
-      await apiRequest('/bookings', {
-        method: 'POST',
-        body: {
-          chargerId: selected.id,
-          startsAt: pendingSlot.startsAt,
-          endsAt: pendingSlot.endsAt
-        }
+      const result = await startPaymentCheckout({
+        chargerId: selected.id,
+        startsAt: pendingSlot.startsAt,
+        endsAt: pendingSlot.endsAt
       });
-      setMessage('Booking confirmed.');
+      setMessage(result.payment.provider === 'MOCK' ? 'Mock payment complete. Booking confirmed.' : 'Payment complete. Booking confirmed.');
       setPendingSlot(null);
       await loadAvailability(selected.id);
     } catch (err) {
@@ -548,7 +546,7 @@ export function MapPage() {
                 Cancel
               </button>
               <button className="primary-button" type="button" onClick={bookSlot} disabled={bookingLoading}>
-                {bookingLoading ? 'Confirming...' : 'Confirm booking'}
+                {bookingLoading ? 'Processing...' : 'Pay and book'}
               </button>
             </div>
           </div>

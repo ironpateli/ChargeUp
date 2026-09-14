@@ -1,5 +1,6 @@
 import { query, withTransaction } from '../../shared/db.js';
 import { AppError, assertFound } from '../../shared/errors.js';
+import { expirePendingPaymentBookings } from '../bookings/booking.service.js';
 
 const AVAILABILITY_TIME_ZONE_OFFSET = '+05:30';
 const AVAILABILITY_START_HOUR = 6;
@@ -179,6 +180,8 @@ export async function getChargerById(chargerId) {
 }
 
 export async function getChargerAvailability(chargerId, date) {
+  await expirePendingPaymentBookings();
+
   const chargerResult = await query(
     `
       SELECT id, status
@@ -241,7 +244,7 @@ export async function getChargerAvailability(chargerId, date) {
       SELECT charger_unit_id, starts_at, ends_at
       FROM bookings
       WHERE charger_id = $1
-        AND status = 'CONFIRMED'
+        AND status IN ('CONFIRMED', 'PENDING_PAYMENT')
         AND starts_at < $3
         AND ends_at > $2
       ORDER BY starts_at ASC

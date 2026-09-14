@@ -8,6 +8,7 @@ export function BookingsPage() {
   const [clearingCompleted, setClearingCompleted] = useState(false);
   const [clearingCancelled, setClearingCancelled] = useState(false);
 
+  const pendingBookings = bookings.filter((booking) => booking.status === 'PENDING_PAYMENT');
   const confirmedBookings = bookings.filter((booking) => booking.status === 'CONFIRMED');
   const completedBookings = bookings.filter((booking) => booking.status === 'COMPLETED');
   const cancelledBookings = bookings.filter((booking) => booking.status === 'CANCELLED');
@@ -90,7 +91,7 @@ export function BookingsPage() {
         <td>{new Date(booking.endsAt).toLocaleString()}</td>
         <td><span className="status-pill">{booking.status}</span></td>
         <td>
-          {booking.status === 'CONFIRMED' && (
+          {(booking.status === 'CONFIRMED' || booking.status === 'PENDING_PAYMENT') && (
             <button className="danger-button" type="button" onClick={() => cancelBooking(booking.id)}>
               Cancel
             </button>
@@ -114,6 +115,29 @@ export function BookingsPage() {
       {message && <div className="form-success">{message}</div>}
 
       <div className="booking-section-grid">
+        <div className="table-card booking-history-card">
+          <div className="section-heading-row">
+            <div>
+              <h2>Pending payment</h2>
+              <p>{pendingBookings.length} payment hold{pendingBookings.length === 1 ? '' : 's'}</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Charger</th>
+                <th>Starts</th>
+                <th>Ends</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {renderBookingRows(pendingBookings, 'No pending payments.')}
+            </tbody>
+          </table>
+        </div>
+
         <div className="table-card booking-history-card">
           <div className="section-heading-row">
             <div>

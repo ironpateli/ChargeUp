@@ -141,6 +141,7 @@ Modules
   - owner
   - chargers
   - bookings
+  - payments
   - reviews
   - admin
 
@@ -206,6 +207,9 @@ bookings
 
 reviews
   user feedback for chargers
+
+payments
+  checkout and payment records connected to bookings
 ```
 
 This means a user account can become an owner by creating an owner profile. The charger belongs to the owner profile, not directly to the user account.
@@ -300,26 +304,27 @@ The current version uses confirm-on-submit with physical unit assignment:
 The key database rule is:
 
 ```text
-For the same charger_unit_id, confirmed booking time ranges must not overlap.
+For the same charger_unit_id, confirmed or pending-payment booking time ranges must not overlap.
 ```
 
-That means a station/listing with 4 active charging units can accept up to 4 confirmed bookings for the same time slot. Cancelled and completed bookings do not block future slots.
+That means a station/listing with 4 active charging units can accept up to 4 active bookings for the same time slot. Cancelled and completed bookings do not block future slots.
 
 Expired confirmed bookings are automatically moved to `COMPLETED` when booking-related reads run.
 
-## 10. Payment Gateway Plan
+## 10. Payment Gateway Design
 
-Payments are intentionally not implemented yet.
+Payments use a provider boundary.
 
-The recommended sequence is:
+Current behavior:
 
-1. Add a `payments` table.
-2. Add payment statuses such as `PENDING`, `AUTHORIZED`, `CAPTURED`, `FAILED`, `REFUNDED`.
-3. Create a mock payment provider.
-4. Change booking creation to create a short-lived hold instead of immediate confirmation.
-5. Confirm booking only after payment succeeds.
-6. Add webhook handling.
-7. Replace or supplement the mock provider with Razorpay.
+1. User selects a station slot.
+2. Backend creates a `PENDING_PAYMENT` booking hold and assigns a physical charging unit.
+3. Backend creates a payment record.
+4. Mock mode captures immediately for local testing.
+5. Razorpay mode creates an order and sends checkout data to the frontend.
+6. Frontend opens Razorpay Checkout.
+7. Backend verifies the Razorpay signature.
+8. Valid payment changes the payment to `CAPTURED` and the booking to `CONFIRMED`.
 
 For India-facing production, Razorpay is the practical first real provider.
 
@@ -337,6 +342,8 @@ Instead:
 Booking service -> Payment service -> Payment provider implementation
 ```
 
+Pending payment holds are short-lived. Expired holds are cancelled when booking and availability flows run, so abandoned checkout sessions do not block capacity forever.
+
 ## 11. Current MVP Status
 
 Implemented:
@@ -353,6 +360,10 @@ Implemented:
 - Charger count per station/listing.
 - Physical charger unit assignment.
 - Capacity-aware booking slots.
+- Payment checkout flow.
+- Mock payment provider.
+- Razorpay order creation.
+- Razorpay signature verification.
 - Booking creation.
 - Booking cancellation.
 - Booking completion.
@@ -364,8 +375,6 @@ Implemented:
 
 Not implemented yet:
 
-- Payments.
-- Payment holds.
 - Webhooks.
 - Notifications.
 - Payouts.
@@ -377,10 +386,9 @@ Not implemented yet:
 
 ### Next Backend Features
 
-- Mock payment gateway.
-- Payment schema and service.
-- Temporary booking holds.
-- Razorpay integration.
+- Razorpay webhook handling.
+- Refund flow.
+- Payment retry flow.
 - Webhook idempotency.
 - Notification service.
 - Forgot password flow.

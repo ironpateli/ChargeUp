@@ -27,8 +27,9 @@ Domain Modules
   - Auth
   - Owner profiles
   - Chargers
-- Search and availability
+  - Search and availability
   - Bookings
+  - Payments
   - Reviews
   - Admin controls
 
@@ -75,16 +76,17 @@ Elasticsearch can be added later if the project needs very advanced fuzzy search
 
 ### Payments
 
-Payments are not implemented yet.
+Payments use a provider boundary.
 
-The planned approach is:
+Current behavior:
 
-1. Add a mock payment provider first.
-2. Add payment tables and state transitions.
-3. Integrate Razorpay for India-facing payments.
-4. Keep Stripe possible later through a provider abstraction.
+- `PAYMENT_PROVIDER=mock` confirms bookings immediately for local testing.
+- `PAYMENT_PROVIDER=razorpay` creates a Razorpay order and confirms the booking after signature verification.
+- Payment checkout creates a short-lived `PENDING_PAYMENT` booking hold.
+- Pending payment holds consume charging-unit capacity.
+- Expired pending payment holds are cancelled automatically when booking or availability flows run.
 
-The booking module should not directly depend on Razorpay or Stripe. It should depend on an internal payment service/provider interface.
+The booking module does not directly depend on Razorpay. It depends on the internal payment module/provider flow.
 
 ## Implemented Features
 
@@ -138,6 +140,7 @@ The booking module should not directly depend on Razorpay or Stripe. It should d
 
 - Users can book fixed time slots.
 - Multi-unit stations can accept multiple bookings for the same time slot, one per active charging unit.
+- Booking from the frontend goes through the payment checkout flow.
 - Users can cancel bookings.
 - Booked slots are shown as unavailable.
 - Past dates and invalid time slots are rejected.
@@ -179,6 +182,15 @@ The booking module should not directly depend on Razorpay or Stripe. It should d
 - Charger reviews can be listed.
 - Review cleanup is handled when completed booking history is cleared.
 
+### Payments
+
+- Mock payment provider for local testing.
+- Razorpay order creation when configured.
+- Razorpay Checkout frontend integration.
+- Razorpay signature verification endpoint.
+- Payment records are stored in PostgreSQL.
+- Pending payment bookings hold capacity until confirmed, cancelled, or expired.
+
 ## Current API Areas
 
 ```text
@@ -210,6 +222,10 @@ POST   /bookings
 PATCH  /bookings/:bookingId/cancel
 DELETE /bookings/me/cancelled
 DELETE /bookings/me/completed
+
+POST   /payments/checkout
+POST   /payments/razorpay/verify
+POST   /payments/mock/:paymentId/fail
 
 POST   /reviews
 GET    /reviews/chargers/:chargerId
@@ -291,6 +307,8 @@ Current migrations:
 004_create_charger_availability.sql
 005_add_charger_count.sql
 006_create_charger_units.sql
+007_add_pending_payment_booking_status.sql
+008_create_payments.sql
 ```
 
 Each migration is applied once and recorded in the `schema_migrations` table.
@@ -299,11 +317,7 @@ Because this project is still in active learning/development, early schema chang
 
 ## Important Missing Features
 
-- Payment gateway integration.
-- Mock payment provider.
-- Razorpay integration.
-- Payment webhooks and signature verification.
-- Temporary booking holds before payment confirmation.
+- Payment webhooks.
 - Refund handling.
 - Owner payout tracking.
 - Email/SMS notifications.

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../api.js';
 import { formatConnectorTypes } from '../formatters.js';
+import { startPaymentCheckout } from '../payments.js';
 
 const DEFAULT_DATE = toDateInputValue();
 
@@ -181,16 +182,13 @@ export function StationPage() {
     setMessage('');
 
     try {
-      await apiRequest('/bookings', {
-        method: 'POST',
-        body: {
-          chargerId: station.id,
-          startsAt: pendingSlot.startsAt,
-          endsAt: pendingSlot.endsAt
-        }
+      const result = await startPaymentCheckout({
+        chargerId: station.id,
+        startsAt: pendingSlot.startsAt,
+        endsAt: pendingSlot.endsAt
       });
 
-      setMessage('Booking confirmed.');
+      setMessage(result.payment.provider === 'MOCK' ? 'Mock payment complete. Booking confirmed.' : 'Payment complete. Booking confirmed.');
       setPendingSlot(null);
       const data = await apiRequest(`/chargers/${station.id}/availability?date=${date}`);
       setAvailability(data);
@@ -374,7 +372,7 @@ export function StationPage() {
                 Cancel
               </button>
               <button className="primary-button" type="button" onClick={bookSlot} disabled={bookingLoading}>
-                {bookingLoading ? 'Confirming...' : 'Confirm booking'}
+                {bookingLoading ? 'Processing...' : 'Pay and book'}
               </button>
             </div>
           </div>
