@@ -5,10 +5,10 @@ import L from 'leaflet';
 import {
   ArrowLeft,
   Calendar,
-  CheckCircle2,
   IndianRupee,
   MapPin,
   MessageSquareText,
+  RefreshCw,
   ShieldCheck,
   Zap
 } from 'lucide-react';
@@ -373,7 +373,7 @@ export function StationPage() {
               <span>Payment</span>
               <strong>Secure checkout</strong>
             </div>
-            {bookingLoading && paymentStage && <div className="payment-progress"><CheckCircle2 size={16} /> {paymentStage}</div>}
+            {bookingLoading && paymentStage && <div className="payment-progress"><RefreshCw size={16} className="spin-icon" /> {paymentStage}</div>}
             <div className="modal-actions">
               <button className="ghost-button" type="button" onClick={() => setPendingSlot(null)} disabled={bookingLoading}>
                 Cancel

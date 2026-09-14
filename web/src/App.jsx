@@ -127,7 +127,16 @@ function AppRoutes() {
   }
 
   if (loading) {
-    return <div className="loading-screen">Loading ChargeUp...</div>;
+    return (
+      <div className="loading-screen">
+        <div className="loading-card">
+          <span className="loading-mark"><BatteryCharging size={34} /></span>
+          <strong>ChargeUp</strong>
+          <span>Preparing your charging dashboard...</span>
+          <div className="loading-bar"><span /></div>
+        </div>
+      </div>
+    );
   }
 
   return (
