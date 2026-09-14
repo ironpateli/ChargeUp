@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api.js';
+import { formatMoneyFromPaise } from '../formatters.js';
 
 export function BookingsPage() {
   const [bookings, setBookings] = useState([]);
@@ -76,7 +77,7 @@ export function BookingsPage() {
     if (!sectionBookings.length) {
       return (
         <tr>
-          <td colSpan="5">{emptyMessage}</td>
+          <td colSpan="6">{emptyMessage}</td>
         </tr>
       );
     }
@@ -90,6 +91,18 @@ export function BookingsPage() {
         <td>{new Date(booking.startsAt).toLocaleString()}</td>
         <td>{new Date(booking.endsAt).toLocaleString()}</td>
         <td><span className="status-pill">{booking.status}</span></td>
+        <td>
+          {booking.payment ? (
+            <div className="payment-cell">
+              <strong>{formatMoneyFromPaise(booking.payment.amountPaise, booking.payment.currency)}</strong>
+              <span>{booking.payment.provider} - {booking.payment.status}</span>
+              {booking.payment.providerPaymentId && <span>{booking.payment.providerPaymentId}</span>}
+              {!booking.payment.providerPaymentId && booking.payment.providerOrderId && <span>{booking.payment.providerOrderId}</span>}
+            </div>
+          ) : (
+            <span className="muted">No payment</span>
+          )}
+        </td>
         <td>
           {(booking.status === 'CONFIRMED' || booking.status === 'PENDING_PAYMENT') && (
             <button className="danger-button" type="button" onClick={() => cancelBooking(booking.id)}>
@@ -129,6 +142,7 @@ export function BookingsPage() {
                 <th>Starts</th>
                 <th>Ends</th>
                 <th>Status</th>
+                <th>Payment</th>
                 <th></th>
               </tr>
             </thead>
@@ -152,6 +166,7 @@ export function BookingsPage() {
                 <th>Starts</th>
                 <th>Ends</th>
                 <th>Status</th>
+                <th>Payment</th>
                 <th></th>
               </tr>
             </thead>
@@ -183,6 +198,7 @@ export function BookingsPage() {
                 <th>Starts</th>
                 <th>Ends</th>
                 <th>Status</th>
+                <th>Payment</th>
                 <th></th>
               </tr>
             </thead>
@@ -214,6 +230,7 @@ export function BookingsPage() {
                 <th>Starts</th>
                 <th>Ends</th>
                 <th>Status</th>
+                <th>Payment</th>
                 <th></th>
               </tr>
             </thead>

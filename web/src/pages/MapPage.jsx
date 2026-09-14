@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { Link } from 'react-router-dom';
 import { Calendar, CheckCircle2, IndianRupee, LocateFixed, MapPin, RefreshCw, Search, X, Zap } from 'lucide-react';
 import { apiRequest } from '../api.js';
-import { formatConnectorTypes, formatDistanceKm } from '../formatters.js';
+import { formatConnectorTypes, formatDistanceKm, formatMoneyFromPaise } from '../formatters.js';
 import { startPaymentCheckout } from '../payments.js';
 
 const MUMBAI_CENTER = [19.076, 72.8777];
@@ -101,6 +101,7 @@ export function MapPage() {
   const [loading, setLoading] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [paymentStage, setPaymentStage] = useState('');
   const [isResultsOpen, setIsResultsOpen] = useState(true);
 
   const selectedPosition = useMemo(() => (
@@ -266,20 +267,23 @@ export function MapPage() {
     setError('');
     setMessage('');
     setBookingLoading(true);
+    setPaymentStage('Creating booking hold...');
 
     try {
       const result = await startPaymentCheckout({
         chargerId: selected.id,
         startsAt: pendingSlot.startsAt,
-        endsAt: pendingSlot.endsAt
+        endsAt: pendingSlot.endsAt,
+        onStatusChange: setPaymentStage
       });
-      setMessage(result.payment.provider === 'MOCK' ? 'Mock payment complete. Booking confirmed.' : 'Payment complete. Booking confirmed.');
+      setMessage(`${result.payment.provider === 'MOCK' ? 'Mock payment' : 'Payment'} complete. Booking confirmed for ${formatMoneyFromPaise(result.payment.amountPaise, result.payment.currency)}.`);
       setPendingSlot(null);
       await loadAvailability(selected.id);
     } catch (err) {
       setError(err.message);
     } finally {
       setBookingLoading(false);
+      setPaymentStage('');
     }
   }
 
@@ -540,7 +544,10 @@ export function MapPage() {
               <strong>{formatSlotTime(pendingSlot)}</strong>
               <span>Estimated price</span>
               <strong>Rs. {selected.pricePerHour}</strong>
+              <span>Payment</span>
+              <strong>Secure checkout</strong>
             </div>
+            {bookingLoading && paymentStage && <div className="payment-progress"><RefreshCw size={16} className="spin-icon" /> {paymentStage}</div>}
             <div className="modal-actions">
               <button className="ghost-button" type="button" onClick={() => setPendingSlot(null)} disabled={bookingLoading}>
                 Cancel

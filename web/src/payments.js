@@ -15,7 +15,7 @@ function loadRazorpayCheckout() {
   });
 }
 
-function openRazorpayCheckout(checkout, paymentId) {
+function openRazorpayCheckout(checkout, paymentId, onStatusChange) {
   return new Promise((resolve, reject) => {
     const razorpay = new window.Razorpay({
       key: checkout.keyId,
@@ -30,6 +30,7 @@ function openRazorpayCheckout(checkout, paymentId) {
       },
       handler: async (response) => {
         try {
+          onStatusChange?.('Verifying payment...');
           const result = await apiRequest('/payments/razorpay/verify', {
             method: 'POST',
             body: {
@@ -54,7 +55,8 @@ function openRazorpayCheckout(checkout, paymentId) {
   });
 }
 
-export async function startPaymentCheckout({ chargerId, startsAt, endsAt }) {
+export async function startPaymentCheckout({ chargerId, startsAt, endsAt, onStatusChange }) {
+  onStatusChange?.('Creating booking hold...');
   const checkoutData = await apiRequest('/payments/checkout', {
     method: 'POST',
     body: {
@@ -65,11 +67,15 @@ export async function startPaymentCheckout({ chargerId, startsAt, endsAt }) {
   });
 
   if (checkoutData.checkout.provider === 'MOCK') {
+    onStatusChange?.('Mock payment captured.');
     return checkoutData;
   }
 
+  onStatusChange?.('Opening Razorpay Checkout...');
   await loadRazorpayCheckout();
-  const verified = await openRazorpayCheckout(checkoutData.checkout, checkoutData.payment.id);
+  onStatusChange?.('Waiting for payment confirmation...');
+  const verified = await openRazorpayCheckout(checkoutData.checkout, checkoutData.payment.id, onStatusChange);
+  onStatusChange?.('Payment verified.');
 
   return {
     ...checkoutData,

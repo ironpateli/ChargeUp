@@ -13,7 +13,7 @@ import {
   Zap
 } from 'lucide-react';
 import { apiRequest } from '../api.js';
-import { formatConnectorTypes } from '../formatters.js';
+import { formatConnectorTypes, formatMoneyFromPaise } from '../formatters.js';
 import { startPaymentCheckout } from '../payments.js';
 
 const DEFAULT_DATE = toDateInputValue();
@@ -94,6 +94,7 @@ export function StationPage() {
   const [loading, setLoading] = useState(true);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [paymentStage, setPaymentStage] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -180,15 +181,17 @@ export function StationPage() {
     setBookingLoading(true);
     setError('');
     setMessage('');
+    setPaymentStage('Creating booking hold...');
 
     try {
       const result = await startPaymentCheckout({
         chargerId: station.id,
         startsAt: pendingSlot.startsAt,
-        endsAt: pendingSlot.endsAt
+        endsAt: pendingSlot.endsAt,
+        onStatusChange: setPaymentStage
       });
 
-      setMessage(result.payment.provider === 'MOCK' ? 'Mock payment complete. Booking confirmed.' : 'Payment complete. Booking confirmed.');
+      setMessage(`${result.payment.provider === 'MOCK' ? 'Mock payment' : 'Payment'} complete. Booking confirmed for ${formatMoneyFromPaise(result.payment.amountPaise, result.payment.currency)}.`);
       setPendingSlot(null);
       const data = await apiRequest(`/chargers/${station.id}/availability?date=${date}`);
       setAvailability(data);
@@ -196,6 +199,7 @@ export function StationPage() {
       setError(err.message);
     } finally {
       setBookingLoading(false);
+      setPaymentStage('');
     }
   }
 
@@ -366,7 +370,10 @@ export function StationPage() {
               <strong>{formatSlotTime(pendingSlot)}</strong>
               <span>Estimated price</span>
               <strong>Rs. {station.pricePerHour}</strong>
+              <span>Payment</span>
+              <strong>Secure checkout</strong>
             </div>
+            {bookingLoading && paymentStage && <div className="payment-progress"><CheckCircle2 size={16} /> {paymentStage}</div>}
             <div className="modal-actions">
               <button className="ghost-button" type="button" onClick={() => setPendingSlot(null)} disabled={bookingLoading}>
                 Cancel

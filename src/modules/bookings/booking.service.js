@@ -47,7 +47,18 @@ function toBookingSummary(row) {
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     status: row.status,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    payment: row.payment_id ? {
+      id: Number(row.payment_id),
+      provider: row.payment_provider,
+      status: row.payment_status,
+      amountPaise: Number(row.amount_paise),
+      currency: row.currency,
+      providerOrderId: row.provider_order_id,
+      providerPaymentId: row.provider_payment_id,
+      expiresAt: row.payment_expires_at,
+      createdAt: row.payment_created_at
+    } : null
   };
 }
 
@@ -180,10 +191,20 @@ export async function getMyBookings(userId) {
         b.starts_at,
         b.ends_at,
         b.status,
-        b.created_at
+        b.created_at,
+        p.id AS payment_id,
+        p.provider AS payment_provider,
+        p.status AS payment_status,
+        p.amount_paise,
+        p.currency,
+        p.provider_order_id,
+        p.provider_payment_id,
+        p.expires_at AS payment_expires_at,
+        p.created_at AS payment_created_at
       FROM bookings b
       JOIN chargers c ON c.id = b.charger_id
       JOIN charger_units cu ON cu.id = b.charger_unit_id
+      LEFT JOIN payments p ON p.booking_id = b.id
       WHERE b.user_id = $1
       ORDER BY b.starts_at DESC
     `,
