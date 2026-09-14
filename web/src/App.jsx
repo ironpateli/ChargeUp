@@ -31,6 +31,7 @@ import { OwnerPage } from './pages/OwnerPage.jsx';
 import { AdminPage } from './pages/AdminPage.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
 import { RegisterPage } from './pages/RegisterPage.jsx';
+import { StationPage } from './pages/StationPage.jsx';
 
 function AppShell({ user, onLogout, refreshUser }) {
   const navItems = useMemo(() => ([
@@ -77,6 +78,7 @@ function AppShell({ user, onLogout, refreshUser }) {
       <main className="main">
         <Routes>
           <Route path="/map" element={<MapPage />} />
+          <Route path="/stations/:chargerId" element={<StationPage />} />
           <Route path="/bookings" element={<BookingsPage />} />
           <Route path="/owner" element={user?.role === 'ADMIN' ? <Navigate to="/admin" replace /> : <OwnerPage user={user} refreshUser={refreshUser} />} />
           <Route path="/admin" element={<AdminPage user={user} />} />

@@ -69,6 +69,7 @@ export async function getOwnerChargers(userId) {
         array_agg(cct.connector_type ORDER BY cct.connector_type) AS connector_types,
         c.power_kw,
         c.price_per_hour,
+        c.charger_count,
         c.status,
         c.created_at
       FROM chargers c
@@ -89,6 +90,7 @@ export async function getOwnerChargers(userId) {
     connectorTypes: row.connector_types,
     powerKw: row.power_kw,
     pricePerHour: row.price_per_hour,
+    chargerCount: Number(row.charger_count),
     status: row.status,
     createdAt: row.created_at
   }));

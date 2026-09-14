@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api.js';
 
+const weekDays = [
+  { value: 0, label: 'Sun' },
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' }
+];
+
 const initialChargerForm = {
   name: '',
   addressLine1: '',
@@ -12,8 +22,31 @@ const initialChargerForm = {
   longitude: 72.8777,
   connectorTypes: ['CCS2'],
   powerKw: 22,
-  pricePerHour: 150
+  pricePerHour: 150,
+  chargerCount: 1
 };
+
+function toDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function defaultAvailabilityRules() {
+  return weekDays.map((day) => ({
+    dayOfWeek: day.value,
+    startsAt: '06:00',
+    endsAt: '22:00',
+    slotMinutes: 60,
+    isActive: true
+  }));
+}
+
+function formatSlotTime(slot) {
+  return `${new Date(slot.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(slot.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 export function OwnerPage({ user, refreshUser }) {
   const [ownerProfile, setOwnerProfile] = useState(null);
@@ -24,6 +57,11 @@ export function OwnerPage({ user, refreshUser }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedChargerId, setSelectedChargerId] = useState('');
+  const [availabilityDate, setAvailabilityDate] = useState(toDateInputValue());
+  const [availabilityRules, setAvailabilityRules] = useState(defaultAvailabilityRules);
+  const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
   const isApprovedOwner = ownerProfile?.verificationStatus === 'VERIFIED' && user?.role === 'CHARGER_OWNER';
 
@@ -41,6 +79,7 @@ export function OwnerPage({ user, refreshUser }) {
     try {
       const chargerData = await apiRequest('/owner/chargers');
       setChargers(chargerData.chargers);
+      setSelectedChargerId((current) => current || String(chargerData.chargers[0]?.id ?? ''));
       const bookingData = await apiRequest('/owner/bookings');
       setBookings(bookingData.bookings);
     } catch {
@@ -87,7 +126,8 @@ export function OwnerPage({ user, refreshUser }) {
           latitude: Number(form.latitude),
           longitude: Number(form.longitude),
           powerKw: Number(form.powerKw),
-          pricePerHour: Number(form.pricePerHour)
+          pricePerHour: Number(form.pricePerHour),
+          chargerCount: Number(form.chargerCount)
         }
       });
       setMessage('Charger created and sent for verification.');
@@ -111,6 +151,109 @@ export function OwnerPage({ user, refreshUser }) {
       await loadOwnerData();
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function loadAvailabilityManager(chargerId = selectedChargerId, date = availabilityDate) {
+    if (!chargerId) return;
+
+    setAvailabilityLoading(true);
+    setError('');
+
+    try {
+      const [settings, availability] = await Promise.all([
+        apiRequest(`/chargers/${chargerId}/availability-settings?date=${date}`),
+        apiRequest(`/chargers/${chargerId}/availability?date=${date}`)
+      ]);
+      const rulesByDay = new Map((settings.rules ?? []).map((rule) => [rule.dayOfWeek, rule]));
+      const mergedRules = defaultAvailabilityRules().map((rule) => rulesByDay.get(rule.dayOfWeek) ?? rule);
+
+      setAvailabilityRules(mergedRules);
+      setAvailabilitySlots(availability.slots ?? []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isApprovedOwner && selectedChargerId) {
+      loadAvailabilityManager(selectedChargerId, availabilityDate);
+    }
+  }, [isApprovedOwner, selectedChargerId, availabilityDate]);
+
+  function updateAvailabilityRule(dayOfWeek, changes) {
+    setAvailabilityRules((rules) => rules.map((rule) => (
+      rule.dayOfWeek === dayOfWeek ? { ...rule, ...changes } : rule
+    )));
+  }
+
+  async function saveAvailabilityRules(event) {
+    event.preventDefault();
+    if (!selectedChargerId) return;
+
+    setError('');
+    setMessage('');
+    setAvailabilityLoading(true);
+
+    try {
+      await apiRequest(`/chargers/${selectedChargerId}/availability-rules`, {
+        method: 'PUT',
+        body: { rules: availabilityRules }
+      });
+      setMessage('Availability rules saved.');
+      await loadAvailabilityManager(selectedChargerId, availabilityDate);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }
+
+  async function disableSlot(slot) {
+    if (!selectedChargerId) return;
+
+    setError('');
+    setMessage('');
+    setAvailabilityLoading(true);
+
+    try {
+      await apiRequest(`/chargers/${selectedChargerId}/availability-overrides`, {
+        method: 'PUT',
+        body: {
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
+          status: 'UNAVAILABLE',
+          reason: 'Owner disabled slot'
+        }
+      });
+      setMessage('Slot disabled.');
+      await loadAvailabilityManager(selectedChargerId, availabilityDate);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }
+
+  async function enableSlot(slot) {
+    if (!selectedChargerId || !slot.overrideId) return;
+
+    setError('');
+    setMessage('');
+    setAvailabilityLoading(true);
+
+    try {
+      await apiRequest(`/chargers/${selectedChargerId}/availability-overrides/${slot.overrideId}`, {
+        method: 'DELETE'
+      });
+      setMessage('Slot enabled.');
+      await loadAvailabilityManager(selectedChargerId, availabilityDate);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAvailabilityLoading(false);
     }
   }
 
@@ -176,6 +319,7 @@ export function OwnerPage({ user, refreshUser }) {
               <label>Power kW<input type="number" value={form.powerKw} onChange={(event) => setForm({ ...form, powerKw: event.target.value })} /></label>
               <label>Price/hour<input type="number" value={form.pricePerHour} onChange={(event) => setForm({ ...form, pricePerHour: event.target.value })} /></label>
             </div>
+            <label>Number of chargers<input type="number" min="1" value={form.chargerCount} onChange={(event) => setForm({ ...form, chargerCount: event.target.value })} /></label>
             <label>
               Connector
               <select value={form.connectorTypes[0]} onChange={(event) => setForm({ ...form, connectorTypes: [event.target.value] })}>
@@ -197,17 +341,110 @@ export function OwnerPage({ user, refreshUser }) {
                   {chargers.map((charger) => (
                     <tr key={charger.id}>
                       <td>{charger.name}<br /><span className="muted">{charger.city}</span></td>
+                      <td>{charger.chargerCount} charger{Number(charger.chargerCount) === 1 ? '' : 's'}</td>
                       <td><span className="status-pill">{charger.status}</span></td>
                       <td>
                         {charger.status === 'ACTIVE'
                           ? <button className="secondary-button" type="button" onClick={() => updateStatus(charger.id, 'INACTIVE')}>Deactivate</button>
                           : <button className="secondary-button" type="button" onClick={() => updateStatus(charger.id, 'ACTIVE')}>Activate</button>}
                       </td>
+                      <td>
+                        <button className="ghost-button" type="button" onClick={() => setSelectedChargerId(String(charger.id))}>Manage slots</button>
+                      </td>
                     </tr>
                   ))}
                   {!chargers.length && <tr><td>No chargers yet.</td></tr>}
                 </tbody>
               </table>
+            </div>
+
+            <div className="table-card availability-card">
+              <div className="section-heading-row">
+                <div>
+                  <h2>Availability</h2>
+                  <p>Choose active weekly hours and disable individual slots when needed.</p>
+                </div>
+              </div>
+              {!chargers.length ? (
+                <p className="muted">Create a charger before managing availability.</p>
+              ) : (
+                <>
+                  <div className="field-row">
+                    <label>
+                      Charger
+                      <select value={selectedChargerId} onChange={(event) => setSelectedChargerId(event.target.value)}>
+                        {chargers.map((charger) => (
+                          <option key={charger.id} value={charger.id}>{charger.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Date
+                      <input
+                        type="date"
+                        min={toDateInputValue()}
+                        value={availabilityDate}
+                        onChange={(event) => setAvailabilityDate(event.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <form className="availability-rules-grid" onSubmit={saveAvailabilityRules}>
+                    {availabilityRules.map((rule) => (
+                      <div className="availability-rule-row" key={rule.dayOfWeek}>
+                        <label className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={rule.isActive}
+                            onChange={(event) => updateAvailabilityRule(rule.dayOfWeek, { isActive: event.target.checked })}
+                          />
+                          {weekDays.find((day) => day.value === rule.dayOfWeek)?.label}
+                        </label>
+                        <input
+                          type="time"
+                          value={rule.startsAt}
+                          disabled={!rule.isActive}
+                          onChange={(event) => updateAvailabilityRule(rule.dayOfWeek, { startsAt: event.target.value })}
+                        />
+                        <input
+                          type="time"
+                          value={rule.endsAt}
+                          disabled={!rule.isActive}
+                          onChange={(event) => updateAvailabilityRule(rule.dayOfWeek, { endsAt: event.target.value })}
+                        />
+                        <select
+                          value={rule.slotMinutes}
+                          disabled={!rule.isActive}
+                          onChange={(event) => updateAvailabilityRule(rule.dayOfWeek, { slotMinutes: Number(event.target.value) })}
+                        >
+                          <option value={30}>30 min</option>
+                          <option value={60}>60 min</option>
+                          <option value={120}>120 min</option>
+                        </select>
+                      </div>
+                    ))}
+                    <button className="primary-button" type="submit" disabled={availabilityLoading}>
+                      {availabilityLoading ? 'Saving...' : 'Save weekly hours'}
+                    </button>
+                  </form>
+
+                  <h3>Slots for selected date</h3>
+                  <div className="owner-slot-list">
+                    {availabilityLoading ? <p className="muted">Refreshing slots...</p> : availabilitySlots.length ? availabilitySlots.map((slot) => (
+                      <div className="owner-slot-row" key={slot.startsAt}>
+                        <span>{formatSlotTime(slot)}</span>
+                        <strong>{slot.status}</strong>
+                        {slot.status === 'AVAILABLE' && (
+                          <button className="secondary-button" type="button" onClick={() => disableSlot(slot)}>Disable</button>
+                        )}
+                        {slot.status === 'UNAVAILABLE' && slot.overrideId && (
+                          <button className="secondary-button" type="button" onClick={() => enableSlot(slot)}>Enable</button>
+                        )}
+                      </div>
+                    )) : <p className="muted">No slots generated for this date.</p>}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="table-card">

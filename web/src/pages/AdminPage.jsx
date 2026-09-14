@@ -489,7 +489,7 @@ export function AdminPage({ user }) {
                     <td>
                       {charger.name}
                       <br />
-                      <span className="muted">{charger.powerKw} kW</span>
+                      <span className="muted">{charger.powerKw} kW - {charger.chargerCount ?? 1} charger{Number(charger.chargerCount ?? 1) === 1 ? '' : 's'}</span>
                     </td>
                     <td>
                       {charger.ownerName}

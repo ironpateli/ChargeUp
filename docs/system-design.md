@@ -35,8 +35,11 @@ It has three main actors:
 - Wait for admin approval before listing chargers.
 - List a charger after approval.
 - Set charger location, connector types, speed, price, and status.
+- Set the number of charging units at a station/listing.
 - Update charger details.
 - Activate or deactivate owned chargers.
+- Define weekly active hours.
+- Disable or re-enable individual slots.
 - View bookings for owned chargers.
 
 ### Admin Features
@@ -189,6 +192,12 @@ chargers
 charger_connector_types
   normalized connector relationship
 
+charger_availability_rules
+  weekly active hours and slot duration per charger
+
+charger_availability_overrides
+  individual slot availability changes
+
 bookings
   user reservations for charger time slots
 
@@ -335,6 +344,9 @@ Implemented:
 - Charger search.
 - Map UI.
 - Availability slots.
+- Owner-managed weekly availability.
+- Individual slot overrides.
+- Charger count per station/listing.
 - Booking creation.
 - Booking cancellation.
 - Booking completion.
@@ -382,7 +394,6 @@ Not implemented yet:
 
 ### Next Data Features
 
-- Owner-defined weekly availability.
 - Charger maintenance blocks.
 - Import external charger datasets.
 - Better fuzzy search ranking.

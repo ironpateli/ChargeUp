@@ -28,6 +28,7 @@ function toAdminCharger(row) {
     state: row.state,
     powerKw: row.power_kw,
     pricePerHour: row.price_per_hour,
+    chargerCount: row.charger_count === undefined ? undefined : Number(row.charger_count),
     status: row.status,
     createdAt: row.created_at
   };
@@ -412,6 +413,7 @@ export async function getAllChargersForAdmin() {
         c.state,
         c.power_kw,
         c.price_per_hour,
+        c.charger_count,
         c.status,
         c.created_at
       FROM chargers c
@@ -427,7 +429,7 @@ export async function getAllChargersForAdmin() {
 export async function getPendingChargers() {
   const result = await query(
     `
-      SELECT id, owner_profile_id, name, city, state, status, created_at
+      SELECT id, owner_profile_id, name, city, state, power_kw, price_per_hour, charger_count, status, created_at
       FROM chargers
       WHERE status = 'PENDING_VERIFICATION'
       ORDER BY created_at ASC
@@ -445,7 +447,7 @@ export async function verifyCharger(chargerId) {
           updated_at = now()
       WHERE id = $1
         AND status = 'PENDING_VERIFICATION'
-      RETURNING id, owner_profile_id, name, city, state, status, created_at
+      RETURNING id, owner_profile_id, name, city, state, power_kw, price_per_hour, charger_count, status, created_at
     `,
     [chargerId]
   );
@@ -492,6 +494,7 @@ export async function updateAdminChargerStatus(chargerId, status) {
         c.state,
         c.power_kw,
         c.price_per_hour,
+        c.charger_count,
         c.status,
         c.created_at
       FROM chargers c

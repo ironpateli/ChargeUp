@@ -13,6 +13,14 @@ const connectorType = z.enum(['CCS2', 'TYPE_2', 'CHADEMO', 'GB_T', 'TESLA_NACS']
 });
 const ownerChargerStatus = z.enum(['ACTIVE', 'INACTIVE']);
 const chargerSearchSort = z.enum(['nearest', 'fastest', 'cheapest']);
+const timeOnly = z.string()
+  .regex(/^\d{2}:\d{2}$/, 'Time must use HH:MM format.')
+  .refine((value) => {
+    const [hour, minute] = value.split(':').map(Number);
+
+    return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+  }, 'Time must be a valid 24-hour time.');
+const isoDateTime = z.string().datetime('Time slot must be a valid ISO date-time.');
 const chargerName = z.string({
   required_error: 'Charger name is required.',
   invalid_type_error: 'Charger name must be text.'
@@ -51,6 +59,10 @@ const pricePerHour = z.number({
   required_error: 'Price per hour is required.',
   invalid_type_error: 'Price per hour must be a number.'
 }).nonnegative('Price per hour cannot be negative.');
+const chargerCount = z.number({
+  required_error: 'Number of chargers is required.',
+  invalid_type_error: 'Number of chargers must be a number.'
+}).int('Number of chargers must be a whole number.').positive('Number of chargers must be greater than 0.');
 const dateOnly = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must use YYYY-MM-DD format')
   .refine((value) => {
@@ -61,6 +73,17 @@ const dateOnly = z.string()
       && date.getUTCMonth() === month - 1
       && date.getUTCDate() === day;
   }, 'date must be a valid calendar date');
+
+const availabilityRule = z.object({
+  dayOfWeek: z.coerce.number().int().min(0, 'Day must be between 0 and 6.').max(6, 'Day must be between 0 and 6.'),
+  startsAt: timeOnly,
+  endsAt: timeOnly,
+  slotMinutes: z.coerce.number().int().refine((value) => [30, 60, 120].includes(value), 'Slot length must be 30, 60, or 120 minutes.').default(60),
+  isActive: z.boolean().default(true)
+}).refine((value) => value.endsAt > value.startsAt, {
+  message: 'End time must be after start time.',
+  path: ['endsAt']
+});
 
 export const searchChargersSchema = z.object({
   query: z.object({
@@ -96,7 +119,8 @@ export const updateChargerSchema = z.object({
     longitude: longitude.optional(),
     connectorTypes: connectorTypes.optional(),
     powerKw: powerKw.optional(),
-    pricePerHour: pricePerHour.optional()
+    pricePerHour: pricePerHour.optional(),
+    chargerCount: chargerCount.optional()
   }).refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required.'
   })
@@ -120,6 +144,53 @@ export const getChargerAvailabilitySchema = z.object({
   })
 });
 
+export const getChargerAvailabilitySettingsSchema = z.object({
+  params: z.object({
+    chargerId: z.coerce.number().int().positive()
+  }),
+  query: z.object({
+    date: dateOnly.optional()
+  })
+});
+
+export const updateChargerAvailabilityRulesSchema = z.object({
+  params: z.object({
+    chargerId: z.coerce.number().int().positive()
+  }),
+  body: z.object({
+    rules: z.array(availabilityRule).min(1, 'At least one availability rule is required.').max(7, 'Only one rule per weekday is allowed.')
+  }).refine((value) => new Set(value.rules.map((rule) => rule.dayOfWeek)).size === value.rules.length, {
+    message: 'Only one rule per weekday is allowed.',
+    path: ['rules']
+  })
+});
+
+export const upsertChargerAvailabilityOverrideSchema = z.object({
+  params: z.object({
+    chargerId: z.coerce.number().int().positive()
+  }),
+  body: z.object({
+    startsAt: isoDateTime,
+    endsAt: isoDateTime,
+    status: z.enum(['AVAILABLE', 'UNAVAILABLE'], {
+      errorMap: () => ({ message: 'Override status must be AVAILABLE or UNAVAILABLE.' })
+    }),
+    reason: z.string({
+      invalid_type_error: 'Reason must be text.'
+    }).trim().max(200, 'Reason must be at most 200 characters.').optional()
+  }).refine((value) => new Date(value.endsAt) > new Date(value.startsAt), {
+    message: 'End time must be after start time.',
+    path: ['endsAt']
+  })
+});
+
+export const deleteChargerAvailabilityOverrideSchema = z.object({
+  params: z.object({
+    chargerId: z.coerce.number().int().positive(),
+    overrideId: z.coerce.number().int().positive()
+  })
+});
+
 export const createChargerSchema = z.object({
   body: z.object({
     name: chargerName,
@@ -133,6 +204,7 @@ export const createChargerSchema = z.object({
     longitude,
     connectorTypes,
     powerKw,
-    pricePerHour
+    pricePerHour,
+    chargerCount: chargerCount.default(1)
   })
 });

@@ -27,7 +27,7 @@ Domain Modules
   - Auth
   - Owner profiles
   - Chargers
-  - Search and availability
+- Search and availability
   - Bookings
   - Reviews
   - Admin controls
@@ -127,6 +127,7 @@ The booking module should not directly depend on Razorpay or Stripe. It should d
 ### Charger Management
 
 - Owners can create chargers after owner approval.
+- Owners can set the number of charging units at a station/listing.
 - Owners can update charger details.
 - Owners can activate or deactivate their chargers.
 - Admins can view and control chargers across the system.
@@ -146,6 +147,13 @@ The booking module should not directly depend on Razorpay or Stripe. It should d
   - cancelled
 - Users can clear cancelled booking history.
 - Users can clear completed booking history.
+
+### Availability Management
+
+- Owners can define weekly active hours per charger.
+- Owners can choose slot duration: 30, 60, or 120 minutes.
+- Owners can disable individual generated slots.
+- Owners can re-enable owner-disabled slots.
 
 ### Owner Flow
 
@@ -188,9 +196,13 @@ GET    /owner/chargers
 GET    /chargers
 GET    /chargers/:chargerId
 GET    /chargers/:chargerId/availability
+GET    /chargers/:chargerId/availability-settings
 POST   /chargers
 PATCH  /chargers/:chargerId
 PATCH  /chargers/:chargerId/status
+PUT    /chargers/:chargerId/availability-rules
+PUT    /chargers/:chargerId/availability-overrides
+DELETE /chargers/:chargerId/availability-overrides/:overrideId
 
 GET    /bookings/me
 POST   /bookings
@@ -275,6 +287,8 @@ Current migrations:
 001_initial_schema.sql
 002_create_reviews.sql
 003_enable_trigram_search.sql
+004_create_charger_availability.sql
+005_add_charger_count.sql
 ```
 
 Each migration is applied once and recorded in the `schema_migrations` table.
@@ -295,7 +309,6 @@ Because this project is still in active learning/development, early schema chang
 - Refresh tokens or stronger session management.
 - Rate limiting.
 - Audit logs for admin actions.
-- Owner-defined weekly availability schedules.
 - Charger maintenance/unavailable blocks.
 - Import flow for external charger datasets.
 - Automated backend and frontend tests.

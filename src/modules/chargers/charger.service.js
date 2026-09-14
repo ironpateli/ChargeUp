@@ -4,13 +4,60 @@ import { AppError, assertFound } from '../../shared/errors.js';
 const AVAILABILITY_TIME_ZONE_OFFSET = '+05:30';
 const AVAILABILITY_START_HOUR = 6;
 const AVAILABILITY_END_HOUR = 22;
+const DEFAULT_SLOT_MINUTES = 60;
 
 function toIsoAtLocalHour(date, hour) {
   return `${date}T${String(hour).padStart(2, '0')}:00:00${AVAILABILITY_TIME_ZONE_OFFSET}`;
 }
 
+function toIsoAtLocalTime(date, time) {
+  const [hour, minute] = time.slice(0, 5).split(':');
+
+  return `${date}T${hour}:${minute}:00${AVAILABILITY_TIME_ZONE_OFFSET}`;
+}
+
+function getDayOfWeek(date) {
+  const utcNoon = new Date(`${date}T12:00:00Z`);
+
+  return utcNoon.getUTCDay();
+}
+
 function rangesOverlap(firstStart, firstEnd, secondStart, secondEnd) {
   return firstStart < secondEnd && secondStart < firstEnd;
+}
+
+function defaultAvailabilityRule(date) {
+  return {
+    day_of_week: getDayOfWeek(date),
+    starts_at: `${String(AVAILABILITY_START_HOUR).padStart(2, '0')}:00`,
+    ends_at: `${String(AVAILABILITY_END_HOUR).padStart(2, '0')}:00`,
+    slot_minutes: DEFAULT_SLOT_MINUTES,
+    is_active: true
+  };
+}
+
+function toAvailabilityRule(row) {
+  return {
+    id: row.id ? Number(row.id) : null,
+    chargerId: Number(row.charger_id),
+    dayOfWeek: Number(row.day_of_week),
+    startsAt: row.starts_at.slice(0, 5),
+    endsAt: row.ends_at.slice(0, 5),
+    slotMinutes: Number(row.slot_minutes),
+    isActive: row.is_active
+  };
+}
+
+function toAvailabilityOverride(row) {
+  return {
+    id: Number(row.id),
+    chargerId: Number(row.charger_id),
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    status: row.status,
+    reason: row.reason,
+    createdAt: row.created_at
+  };
 }
 
 export async function searchChargers(filters) {
@@ -28,6 +75,7 @@ export async function searchChargers(filters) {
         array_agg(cct.connector_type ORDER BY cct.connector_type) AS connector_types,
         c.power_kw,
         c.price_per_hour,
+        c.charger_count,
         c.status,
         GREATEST(
           similarity(c.name, COALESCE($4::text, '')),
@@ -124,6 +172,29 @@ export async function getChargerAvailability(chargerId, date) {
   const nextDay = new Date(`${date}T00:00:00${AVAILABILITY_TIME_ZONE_OFFSET}`);
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
   const dayEnd = nextDay.toISOString();
+  const dayOfWeek = getDayOfWeek(date);
+  const ruleResult = await query(
+    `
+      SELECT id, charger_id, day_of_week, starts_at::text, ends_at::text, slot_minutes, is_active
+      FROM charger_availability_rules
+      WHERE charger_id = $1
+        AND day_of_week = $2
+    `,
+    [chargerId, dayOfWeek]
+  );
+  const rule = ruleResult.rows[0] ?? defaultAvailabilityRule(date);
+  const overridesResult = await query(
+    `
+      SELECT id, charger_id, starts_at, ends_at, status, reason, created_at
+      FROM charger_availability_overrides
+      WHERE charger_id = $1
+        AND starts_at < $3
+        AND ends_at > $2
+      ORDER BY starts_at ASC
+    `,
+    [chargerId, dayStart, dayEnd]
+  );
+  const overrides = overridesResult.rows.map(toAvailabilityOverride);
 
   const bookingsResult = await query(
     `
@@ -146,25 +217,53 @@ export async function getChargerAvailability(chargerId, date) {
   const availableSlots = [];
   const slots = [];
 
-  if (charger.status === 'ACTIVE') {
+  if (charger.status === 'ACTIVE' && rule.is_active) {
     const bookedRanges = bookedSlots.map((slot) => ({
       startsAt: new Date(slot.startsAt),
       endsAt: new Date(slot.endsAt)
     }));
+    const overrideRanges = overrides.map((override) => ({
+      ...override,
+      startsAtDate: new Date(override.startsAt),
+      endsAtDate: new Date(override.endsAt)
+    }));
 
-    for (let hour = AVAILABILITY_START_HOUR; hour < AVAILABILITY_END_HOUR; hour += 1) {
-      const startsAt = new Date(toIsoAtLocalHour(date, hour));
-      const endsAt = new Date(toIsoAtLocalHour(date, hour + 1));
+    const operatingStart = new Date(toIsoAtLocalTime(date, rule.starts_at));
+    const operatingEnd = new Date(toIsoAtLocalTime(date, rule.ends_at));
+    const slotMinutes = Number(rule.slot_minutes);
+
+    for (
+      let startsAt = new Date(operatingStart);
+      startsAt < operatingEnd;
+      startsAt = new Date(startsAt.getTime() + slotMinutes * 60 * 1000)
+    ) {
+      const endsAt = new Date(startsAt.getTime() + slotMinutes * 60 * 1000);
+
+      if (endsAt > operatingEnd) {
+        break;
+      }
+
       const isBooked = bookedRanges.some((slot) => (
         rangesOverlap(startsAt, endsAt, slot.startsAt, slot.endsAt)
       ));
       const isPassed = startsAt <= new Date();
+      const override = overrideRanges.find((slot) => (
+        rangesOverlap(startsAt, endsAt, slot.startsAtDate, slot.endsAtDate)
+      ));
 
       if (isBooked) {
         slots.push({
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
           status: 'BOOKED'
+        });
+      } else if (override?.status === 'UNAVAILABLE') {
+        slots.push({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          status: 'UNAVAILABLE',
+          overrideId: override.id,
+          reason: override.reason
         });
       } else if (isPassed) {
         slots.push({
@@ -189,16 +288,158 @@ export async function getChargerAvailability(chargerId, date) {
   return {
     chargerId,
     date,
-    slotMinutes: 60,
+    slotMinutes: Number(rule.slot_minutes),
     timeZone: 'Asia/Kolkata',
+    rule: rule.id ? toAvailabilityRule(rule) : {
+      id: null,
+      chargerId: Number(chargerId),
+      dayOfWeek: dayOfWeek,
+      startsAt: rule.starts_at,
+      endsAt: rule.ends_at,
+      slotMinutes: Number(rule.slot_minutes),
+      isActive: rule.is_active
+    },
     operatingHours: {
-      startsAt: toIsoAtLocalHour(date, AVAILABILITY_START_HOUR),
-      endsAt: toIsoAtLocalHour(date, AVAILABILITY_END_HOUR)
+      startsAt: toIsoAtLocalTime(date, rule.starts_at),
+      endsAt: toIsoAtLocalTime(date, rule.ends_at)
     },
     bookedSlots,
+    overrides,
     availableSlots,
     slots
   };
+}
+
+export async function getChargerAvailabilitySettings(user, chargerId, date) {
+  await assertCanManageCharger({ query }, user, chargerId);
+
+  const rulesResult = await query(
+    `
+      SELECT id, charger_id, day_of_week, starts_at::text, ends_at::text, slot_minutes, is_active
+      FROM charger_availability_rules
+      WHERE charger_id = $1
+      ORDER BY day_of_week ASC
+    `,
+    [chargerId]
+  );
+  const rules = rulesResult.rows.map(toAvailabilityRule);
+  const overridesParams = [chargerId];
+  let overridesWhere = '';
+
+  if (date) {
+    const dayStart = toIsoAtLocalHour(date, 0);
+    const nextDay = new Date(`${date}T00:00:00${AVAILABILITY_TIME_ZONE_OFFSET}`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    overridesParams.push(dayStart, nextDay.toISOString());
+    overridesWhere = 'AND starts_at < $3 AND ends_at > $2';
+  }
+
+  const overridesResult = await query(
+    `
+      SELECT id, charger_id, starts_at, ends_at, status, reason, created_at
+      FROM charger_availability_overrides
+      WHERE charger_id = $1
+        ${overridesWhere}
+      ORDER BY starts_at ASC
+      LIMIT 100
+    `,
+    overridesParams
+  );
+
+  return {
+    rules,
+    overrides: overridesResult.rows.map(toAvailabilityOverride)
+  };
+}
+
+export async function updateChargerAvailabilityRules(user, chargerId, rules) {
+  return withTransaction(async (client) => {
+    await assertCanManageCharger(client, user, chargerId);
+
+    await client.query('DELETE FROM charger_availability_rules WHERE charger_id = $1', [chargerId]);
+
+    const savedRules = [];
+
+    for (const rule of rules) {
+      const result = await client.query(
+        `
+          INSERT INTO charger_availability_rules (
+            charger_id,
+            day_of_week,
+            starts_at,
+            ends_at,
+            slot_minutes,
+            is_active
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING id, charger_id, day_of_week, starts_at::text, ends_at::text, slot_minutes, is_active
+        `,
+        [
+          chargerId,
+          rule.dayOfWeek,
+          rule.startsAt,
+          rule.endsAt,
+          rule.slotMinutes,
+          rule.isActive
+        ]
+      );
+
+      savedRules.push(toAvailabilityRule(result.rows[0]));
+    }
+
+    return savedRules;
+  });
+}
+
+export async function upsertChargerAvailabilityOverride(user, chargerId, input) {
+  return withTransaction(async (client) => {
+    await assertCanManageCharger(client, user, chargerId);
+
+    const result = await client.query(
+      `
+        INSERT INTO charger_availability_overrides (
+          charger_id,
+          starts_at,
+          ends_at,
+          status,
+          reason
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (charger_id, starts_at, ends_at)
+        DO UPDATE SET
+          status = EXCLUDED.status,
+          reason = EXCLUDED.reason,
+          updated_at = now()
+        RETURNING id, charger_id, starts_at, ends_at, status, reason, created_at
+      `,
+      [
+        chargerId,
+        input.startsAt,
+        input.endsAt,
+        input.status,
+        input.reason ?? null
+      ]
+    );
+
+    return toAvailabilityOverride(result.rows[0]);
+  });
+}
+
+export async function deleteChargerAvailabilityOverride(user, chargerId, overrideId) {
+  await assertCanManageCharger({ query }, user, chargerId);
+
+  const result = await query(
+    `
+      DELETE FROM charger_availability_overrides
+      WHERE id = $1
+        AND charger_id = $2
+    `,
+    [overrideId, chargerId]
+  );
+
+  if (result.rowCount === 0) {
+    throw new AppError('Availability override not found.', 404, 'AVAILABILITY_OVERRIDE_NOT_FOUND');
+  }
 }
 
 async function findChargerById(dbQuery, chargerId) {
@@ -214,17 +455,20 @@ async function findChargerById(dbQuery, chargerId) {
         c.state,
         c.postal_code,
         c.country,
+        op.display_name AS owner_display_name,
         c.latitude,
         c.longitude,
         array_agg(cct.connector_type ORDER BY cct.connector_type) AS connector_types,
         c.power_kw,
         c.price_per_hour,
+        c.charger_count,
         c.status,
         c.created_at
       FROM chargers c
+      JOIN owner_profiles op ON op.id = c.owner_profile_id
       JOIN charger_connector_types cct ON cct.charger_id = c.id
       WHERE c.id = $1
-      GROUP BY c.id
+      GROUP BY c.id, op.id
     `,
     [chargerId]
   );
@@ -279,6 +523,7 @@ export async function updateCharger(user, chargerId, input) {
             longitude = $10,
             power_kw = $11,
             price_per_hour = $12,
+            charger_count = $13,
             updated_at = now()
         WHERE id = $1
         RETURNING id
@@ -295,7 +540,8 @@ export async function updateCharger(user, chargerId, input) {
         input.latitude ?? current.latitude,
         input.longitude ?? current.longitude,
         input.powerKw ?? current.power_kw,
-        input.pricePerHour ?? current.price_per_hour
+        input.pricePerHour ?? current.price_per_hour,
+        input.chargerCount ?? current.charger_count
       ]
     );
 
@@ -378,9 +624,10 @@ export async function createCharger(userId, input) {
           latitude,
           longitude,
           power_kw,
-          price_per_hour
+          price_per_hour,
+          charger_count
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
       `,
       [
@@ -395,7 +642,8 @@ export async function createCharger(userId, input) {
         input.latitude,
         input.longitude,
         input.powerKw,
-        input.pricePerHour
+        input.pricePerHour,
+        input.chargerCount
       ]
     );
 

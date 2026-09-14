@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { Link } from 'react-router-dom';
 import { Calendar, CheckCircle2, IndianRupee, LocateFixed, MapPin, RefreshCw, Search, X, Zap } from 'lucide-react';
 import { apiRequest } from '../api.js';
+import { formatConnectorTypes, formatDistanceKm } from '../formatters.js';
 
 const MUMBAI_CENTER = [19.076, 72.8777];
 
@@ -34,18 +36,6 @@ function rangesOverlap(firstStart, firstEnd, secondStart, secondEnd) {
   return firstStart < secondEnd && secondStart < firstEnd;
 }
 
-function formatConnectorTypes(value) {
-  if (Array.isArray(value)) {
-    return value.join(', ');
-  }
-
-  if (typeof value === 'string') {
-    return value.replace(/[{}"]/g, '').replaceAll(',', ', ');
-  }
-
-  return 'Not specified';
-}
-
 function RecenterMap({ center }) {
   const map = useMap();
 
@@ -68,6 +58,7 @@ function normalizeCharger(charger) {
     connectorTypes: formatConnectorTypes(charger.connector_types),
     powerKw: charger.power_kw,
     pricePerHour: charger.price_per_hour,
+    chargerCount: charger.charger_count ?? 1,
     status: charger.status,
     distanceMeters: charger.distance_meters ? Math.round(Number(charger.distance_meters)) : null
   };
@@ -413,8 +404,9 @@ export function MapPage() {
                 <span className="muted">{charger.addressLine1}, {charger.city}</span>
                 <span className="charger-result-meta">
                   <span>{charger.powerKw} kW</span>
+                  <span>{charger.chargerCount} charger{Number(charger.chargerCount) === 1 ? '' : 's'}</span>
                   <span>{charger.connectorTypes}</span>
-                  {charger.distanceMeters !== null && <span>{charger.distanceMeters} m</span>}
+                  {charger.distanceMeters !== null && <span>{formatDistanceKm(charger.distanceMeters)}</span>}
                 </span>
               </button>
             ))}
@@ -440,7 +432,11 @@ export function MapPage() {
               icon={chargerIcon}
             eventHandlers={{ click: () => setSelected(charger) }}
             >
-              <Popup>{charger.name}</Popup>
+              <Popup>
+                <strong>{charger.name}</strong>
+                <br />
+                <Link to={`/stations/${charger.id}`}>Open overview</Link>
+              </Popup>
             </Marker>
           ))}
           {myLocation && (
@@ -478,8 +474,12 @@ export function MapPage() {
                 <span><Zap size={16} /> {selected.powerKw} kW</span>
                 <span><IndianRupee size={16} /> {selected.pricePerHour}/hr</span>
               </div>
+              <p className="muted">{selected.chargerCount} charger{Number(selected.chargerCount) === 1 ? '' : 's'} at this station</p>
               <p className="muted">Connectors: {selected.connectorTypes}</p>
-              {selected.distanceMeters !== null && <p className="muted">{selected.distanceMeters} m away</p>}
+              {selected.distanceMeters !== null && <p className="muted">{formatDistanceKm(selected.distanceMeters)} away</p>}
+              <Link className="secondary-button full-width-button" to={`/stations/${selected.id}`}>
+                Open station overview
+              </Link>
 
               <label className="date-field">
                 <Calendar size={16} />
