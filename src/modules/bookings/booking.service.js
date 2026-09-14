@@ -72,7 +72,24 @@ function assertBookableSlot(startsAt, endsAt, now = new Date()) {
   }
 }
 
+export async function markExpiredConfirmedBookingsCompleted() {
+  const result = await query(
+    `
+      UPDATE bookings
+      SET status = 'COMPLETED',
+          updated_at = now()
+      WHERE status = 'CONFIRMED'
+        AND ends_at <= now()
+      RETURNING id
+    `
+  );
+
+  return result.rowCount;
+}
+
 export async function getMyBookings(userId) {
+  await markExpiredConfirmedBookingsCompleted();
+
   const result = await query(
     `
       SELECT
@@ -106,6 +123,35 @@ export async function clearMyCancelledBookings(userId) {
   );
 
   return result.rowCount;
+}
+
+export async function clearMyCompletedBookings(userId) {
+  return withTransaction(async (client) => {
+    await client.query(
+      `
+        DELETE FROM reviews
+        WHERE booking_id IN (
+          SELECT id
+          FROM bookings
+          WHERE user_id = $1
+            AND status = 'COMPLETED'
+        )
+      `,
+      [userId]
+    );
+
+    const result = await client.query(
+      `
+        DELETE FROM bookings
+        WHERE user_id = $1
+          AND status = 'COMPLETED'
+        RETURNING id
+      `,
+      [userId]
+    );
+
+    return result.rowCount;
+  });
 }
 
 export async function createBooking(userId, input) {

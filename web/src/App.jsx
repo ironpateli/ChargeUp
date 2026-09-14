@@ -36,7 +36,7 @@ function AppShell({ user, onLogout, refreshUser }) {
   const navItems = useMemo(() => ([
     { to: '/map', label: 'Map', icon: MapPinned },
     { to: '/bookings', label: 'My Bookings', icon: CalendarClock },
-    { to: '/owner', label: 'Owner', icon: Warehouse },
+    ...(user?.role !== 'ADMIN' ? [{ to: '/owner', label: 'Owner', icon: Warehouse }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/admin', label: 'Admin', icon: ShieldCheck }] : [])
   ]), [user?.role]);
 
@@ -78,7 +78,7 @@ function AppShell({ user, onLogout, refreshUser }) {
         <Routes>
           <Route path="/map" element={<MapPage />} />
           <Route path="/bookings" element={<BookingsPage />} />
-          <Route path="/owner" element={<OwnerPage user={user} refreshUser={refreshUser} />} />
+          <Route path="/owner" element={user?.role === 'ADMIN' ? <Navigate to="/admin" replace /> : <OwnerPage user={user} refreshUser={refreshUser} />} />
           <Route path="/admin" element={<AdminPage user={user} />} />
           <Route path="*" element={<Navigate to="/map" replace />} />
         </Routes>

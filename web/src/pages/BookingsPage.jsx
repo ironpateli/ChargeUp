@@ -5,9 +5,11 @@ export function BookingsPage() {
   const [bookings, setBookings] = useState([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [clearingCompleted, setClearingCompleted] = useState(false);
   const [clearingCancelled, setClearingCancelled] = useState(false);
 
-  const confirmedBookings = bookings.filter((booking) => booking.status !== 'CANCELLED');
+  const confirmedBookings = bookings.filter((booking) => booking.status === 'CONFIRMED');
+  const completedBookings = bookings.filter((booking) => booking.status === 'COMPLETED');
   const cancelledBookings = bookings.filter((booking) => booking.status === 'CANCELLED');
 
   async function loadBookings() {
@@ -50,6 +52,22 @@ export function BookingsPage() {
       setError(err.message);
     } finally {
       setClearingCancelled(false);
+    }
+  }
+
+  async function clearCompletedBookings() {
+    setError('');
+    setMessage('');
+    setClearingCompleted(true);
+
+    try {
+      const data = await apiRequest('/bookings/me/completed', { method: 'DELETE' });
+      setMessage(`Cleared ${data.deletedCount} completed booking${data.deletedCount === 1 ? '' : 's'}.`);
+      await loadBookings();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setClearingCompleted(false);
     }
   }
 
@@ -97,7 +115,7 @@ export function BookingsPage() {
           <div className="section-heading-row">
             <div>
               <h2>Confirmed</h2>
-              <p>{confirmedBookings.length} non-cancelled booking{confirmedBookings.length === 1 ? '' : 's'}</p>
+              <p>{confirmedBookings.length} active booking{confirmedBookings.length === 1 ? '' : 's'}</p>
             </div>
           </div>
           <table>
@@ -111,7 +129,38 @@ export function BookingsPage() {
               </tr>
             </thead>
             <tbody>
-              {renderBookingRows(confirmedBookings, 'No confirmed or completed bookings.')}
+              {renderBookingRows(confirmedBookings, 'No confirmed bookings.')}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="table-card booking-history-card">
+          <div className="section-heading-row">
+            <div>
+              <h2>Completed</h2>
+              <p>{completedBookings.length} completed booking{completedBookings.length === 1 ? '' : 's'}</p>
+            </div>
+            <button
+              className="danger-button"
+              type="button"
+              onClick={clearCompletedBookings}
+              disabled={!completedBookings.length || clearingCompleted}
+            >
+              {clearingCompleted ? 'Clearing...' : 'Clear completed'}
+            </button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Charger</th>
+                <th>Starts</th>
+                <th>Ends</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {renderBookingRows(completedBookings, 'No completed bookings.')}
             </tbody>
           </table>
         </div>

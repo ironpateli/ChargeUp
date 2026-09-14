@@ -1,5 +1,6 @@
 import { query } from '../../shared/db.js';
 import { AppError } from '../../shared/errors.js';
+import { markExpiredConfirmedBookingsCompleted } from '../bookings/booking.service.js';
 
 async function getOwnerProfileId(userId) {
   const result = await query(
@@ -22,6 +23,8 @@ async function getOwnerProfileId(userId) {
 
 export async function getOwnerBookings(userId) {
   const ownerProfileId = await getOwnerProfileId(userId);
+  await markExpiredConfirmedBookingsCompleted();
+
   const result = await query(
     `
       SELECT

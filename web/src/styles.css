@@ -196,6 +196,7 @@ select {
 .form-error {
   color: #8d241a;
   background: #ffe9e6;
+  white-space: pre-line;
 }
 
 .form-success {
@@ -699,6 +700,50 @@ select {
   gap: 18px;
 }
 
+.admin-lists-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-list-card {
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.admin-list-card-wide {
+  min-width: 0;
+}
+
+.admin-list-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(4, minmax(130px, 0.7fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.admin-list-controls label {
+  margin-bottom: 0;
+}
+
+.admin-table-scroll {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid #e5ece8;
+  border-radius: 8px;
+}
+
+.admin-table-scroll table {
+  min-width: 760px;
+}
+
+.admin-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #ffffff;
+}
+
 .booking-history-card {
   display: grid;
   gap: 14px;
@@ -798,7 +843,8 @@ th {
   .app-shell,
   .map-workspace,
   .two-column,
-  .map-filter-bar {
+  .map-filter-bar,
+  .admin-list-controls {
     grid-template-columns: 1fr;
   }
 

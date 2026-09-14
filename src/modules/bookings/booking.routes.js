@@ -4,6 +4,7 @@ import { validate } from '../../shared/middleware/validate.js';
 import {
   cancelBooking,
   clearMyCancelledBookings,
+  clearMyCompletedBookings,
   createBooking,
   getMyBookings
 } from './booking.service.js';
@@ -26,6 +27,15 @@ bookingRouter.get('/me', requireAuth, async (req, res, next) => {
 bookingRouter.delete('/me/cancelled', requireAuth, async (req, res, next) => {
   try {
     const deletedCount = await clearMyCancelledBookings(req.user.id);
+    res.json({ data: { deletedCount } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+bookingRouter.delete('/me/completed', requireAuth, async (req, res, next) => {
+  try {
+    const deletedCount = await clearMyCompletedBookings(req.user.id);
     res.json({ data: { deletedCount } });
   } catch (error) {
     next(error);
