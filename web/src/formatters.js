@@ -1,13 +1,71 @@
 export function formatConnectorTypes(value) {
+  const formatOne = (item) => formatDisplayLabel(item);
+
   if (Array.isArray(value)) {
-    return value.join(', ');
+    return value.map(formatOne).join(', ');
   }
 
   if (typeof value === 'string') {
-    return value.replace(/[{}"]/g, '').replaceAll(',', ', ');
+    return value
+      .replace(/[{}"]/g, '')
+      .split(',')
+      .map((item) => formatOne(item.trim()))
+      .join(', ');
   }
 
   return 'Not specified';
+}
+
+export function formatDisplayLabel(value) {
+  if (!value) {
+    return 'Not specified';
+  }
+
+  const normalized = String(value).trim().toUpperCase();
+  const knownLabels = {
+    CCS2: 'CCS2',
+    TYPE_2: 'Type 2',
+    CHADEMO: 'CHAdeMO',
+    GB_T: 'GB/T',
+    TESLA_NACS: 'Tesla NACS',
+    MOCK: 'Mock',
+    RAZORPAY: 'Razorpay',
+    EV_USER: 'EV user'
+  };
+
+  if (knownLabels[normalized]) {
+    return knownLabels[normalized];
+  }
+
+  return normalized
+    .toLowerCase()
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function formatRoleLabel(role, fullName) {
+  const name = fullName?.trim();
+  const appendRole = (label) => {
+    if (!name) {
+      return label;
+    }
+
+    return name.toLowerCase().endsWith(label.toLowerCase()) ? name : `${name} ${label.toLowerCase()}`;
+  };
+
+  if (role === 'ADMIN') {
+    return appendRole('Admin');
+  }
+
+  if (role === 'CHARGER_OWNER') {
+    return appendRole('Owner');
+  }
+
+  if (role === 'EV_USER') {
+    return appendRole('User');
+  }
+
+  return formatDisplayLabel(role);
 }
 
 export function formatDistanceKm(distanceMeters) {

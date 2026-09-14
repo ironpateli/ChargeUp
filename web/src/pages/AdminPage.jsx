@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../api.js';
+import { formatDisplayLabel } from '../formatters.js';
 
 const initialOwnerForm = {
   fullName: '',
@@ -140,7 +141,7 @@ function AdminListControls({ controls, onChange, statusOptions, searchPlaceholde
         <select value={controls.status} onChange={(event) => onChange({ ...controls, status: event.target.value })}>
           <option value="">All statuses</option>
           {statusOptions.map((status) => (
-            <option key={status} value={status}>{status}</option>
+            <option key={status} value={status}>{formatDisplayLabel(status)}</option>
           ))}
         </select>
       </label>
@@ -290,7 +291,7 @@ export function AdminPage({ user }) {
         method: 'PATCH',
         body: { status }
       });
-      setMessage(`Charger set to ${status}.`);
+      setMessage(`Charger set to ${formatDisplayLabel(status)}.`);
       await loadAdminData();
     } catch (err) {
       setError(err.message);
@@ -380,7 +381,7 @@ export function AdminPage({ user }) {
                     </td>
                     <td>{ownerProfile.displayName}</td>
                     <td>{new Date(ownerProfile.createdAt).toLocaleDateString()}</td>
-                    <td><span className="status-pill">{ownerProfile.verificationStatus}</span></td>
+                    <td><span className="status-pill">{formatDisplayLabel(ownerProfile.verificationStatus)}</span></td>
                     <td className="action-cell">
                       <button className="primary-button" type="button" onClick={() => updateOwnerProfile(ownerProfile.id, 'approve')}>
                         Approve
@@ -437,7 +438,7 @@ export function AdminPage({ user }) {
                       <span className="muted">{ownerProfile.chargerCount} total</span>
                     </td>
                     <td>{new Date(ownerProfile.createdAt).toLocaleDateString()}</td>
-                    <td><span className="status-pill">{ownerProfile.verificationStatus}</span></td>
+                    <td><span className="status-pill">{formatDisplayLabel(ownerProfile.verificationStatus)}</span></td>
                     <td className="action-cell">
                       {ownerProfile.verificationStatus !== 'SUSPENDED' ? (
                         <button className="danger-button" type="button" onClick={() => updateOwnerAccess(ownerProfile.id, 'suspend')}>
@@ -499,7 +500,7 @@ export function AdminPage({ user }) {
                     <td>{charger.city}, {charger.state}</td>
                     <td>Rs. {charger.pricePerHour}/hr</td>
                     <td>{new Date(charger.createdAt).toLocaleDateString()}</td>
-                    <td><span className="status-pill">{charger.status}</span></td>
+                    <td><span className="status-pill">{formatDisplayLabel(charger.status)}</span></td>
                     <td className="action-cell">
                       {charger.status === 'PENDING_VERIFICATION' && (
                         <button className="primary-button" type="button" onClick={() => verify(charger.id)}>

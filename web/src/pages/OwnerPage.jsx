@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api.js';
+import { formatDisplayLabel } from '../formatters.js';
 
 const weekDays = [
   { value: 0, label: 'Sun' },
@@ -45,7 +46,7 @@ function defaultAvailabilityRules() {
 }
 
 function formatSlotTime(slot) {
-  return `${new Date(slot.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(slot.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  return `${new Date(slot.startsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - ${new Date(slot.endsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 function formatSlotCapacity(slot) {
@@ -57,7 +58,7 @@ function formatSlotCapacity(slot) {
     return `0/${slot.totalUnits ?? slot.bookedCount ?? 1} available`;
   }
 
-  return slot.status;
+  return formatDisplayLabel(slot.status);
 }
 
 export function OwnerPage({ user, refreshUser }) {
@@ -302,7 +303,7 @@ export function OwnerPage({ user, refreshUser }) {
       ) : !isApprovedOwner ? (
         <div className="form-card">
           <h2>Owner request status</h2>
-          <p><span className="status-pill">{ownerProfile.verificationStatus}</span></p>
+          <p><span className="status-pill">{formatDisplayLabel(ownerProfile.verificationStatus)}</span></p>
           {ownerProfile.verificationStatus === 'PENDING_VERIFICATION' && (
             <p className="muted">Your request is waiting for admin approval. You can create chargers after approval.</p>
           )}
@@ -336,10 +337,10 @@ export function OwnerPage({ user, refreshUser }) {
               Connector
               <select value={form.connectorTypes[0]} onChange={(event) => setForm({ ...form, connectorTypes: [event.target.value] })}>
                 <option value="CCS2">CCS2</option>
-                <option value="TYPE_2">TYPE_2</option>
-                <option value="CHADEMO">CHADEMO</option>
-                <option value="GB_T">GB_T</option>
-                <option value="TESLA_NACS">TESLA_NACS</option>
+                <option value="TYPE_2">Type 2</option>
+                <option value="CHADEMO">CHAdeMO</option>
+                <option value="GB_T">GB/T</option>
+                <option value="TESLA_NACS">Tesla NACS</option>
               </select>
             </label>
             <button className="primary-button" type="submit">Create charger</button>
@@ -354,7 +355,7 @@ export function OwnerPage({ user, refreshUser }) {
                     <tr key={charger.id}>
                       <td>{charger.name}<br /><span className="muted">{charger.city}</span></td>
                       <td>{charger.chargerCount} charger{Number(charger.chargerCount) === 1 ? '' : 's'}</td>
-                      <td><span className="status-pill">{charger.status}</span></td>
+                      <td><span className="status-pill">{formatDisplayLabel(charger.status)}</span></td>
                       <td>
                         {charger.status === 'ACTIVE'
                           ? <button className="secondary-button" type="button" onClick={() => updateStatus(charger.id, 'INACTIVE')}>Deactivate</button>
@@ -470,7 +471,7 @@ export function OwnerPage({ user, refreshUser }) {
                         <br />
                         <span className="muted">Unit {booking.unitNumber} - {new Date(booking.startsAt).toLocaleString()}</span>
                       </td>
-                      <td><span className="status-pill">{booking.status}</span></td>
+                      <td><span className="status-pill">{formatDisplayLabel(booking.status)}</span></td>
                     </tr>
                   ))}
                   {!bookings.length && <tr><td>No owner bookings yet.</td></tr>}

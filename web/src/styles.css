@@ -1619,3 +1619,187 @@ th,
     padding: 18px;
   }
 }
+
+/* Minimal spacing cleanup */
+.map-toolbar,
+.page-heading {
+  padding: 18px 20px;
+  border: 1px solid var(--charge-line);
+  border-radius: 8px;
+  box-shadow: var(--charge-shadow);
+}
+
+.map-toolbar h1,
+.page-heading h1 {
+  line-height: 1.1;
+}
+
+.toolbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.results-toggle {
+  top: 16px;
+  left: 72px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-color: var(--charge-line);
+  color: var(--charge-ink);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.results-toggle span {
+  color: var(--charge-blue);
+  background: var(--charge-blue-soft);
+}
+
+.search-results-panel {
+  top: 80px;
+}
+
+.leaflet-top.leaflet-left {
+  top: 8px;
+  left: 8px;
+}
+
+.leaflet-control-zoom a {
+  color: var(--charge-ink);
+}
+
+.map-details-drawer {
+  width: min(440px, calc(100% - 32px));
+  padding: 20px;
+}
+
+.side-panel h3 {
+  margin-top: 18px;
+  margin-bottom: 12px;
+}
+
+.slot-list,
+.station-slot-list {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.slot-button {
+  min-height: 68px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.slot-button span {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.slot-button small {
+  flex: 0 0 auto;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #eaf4ff;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 1;
+  white-space: nowrap;
+}
+
+.slot-button.disabled-slot small {
+  color: #475569;
+  background: #ffffff;
+}
+
+.station-layout {
+  align-items: start;
+  gap: 24px;
+}
+
+.booking-panel {
+  min-width: 360px;
+  padding: 22px;
+}
+
+.booking-panel h2 {
+  margin-bottom: 14px;
+}
+
+.booking-summary-row {
+  margin: 14px 0 18px;
+}
+
+.station-slot-list {
+  max-height: 620px;
+}
+
+.status-pill {
+  text-transform: none;
+}
+
+.charger-result {
+  padding: 14px;
+}
+
+.charger-result-meta span,
+.hero-chip-row span,
+.booking-summary-row span,
+.metric-grid span {
+  line-height: 1.25;
+}
+
+.section-heading-row {
+  gap: 16px;
+}
+
+@media (max-width: 980px) {
+  .results-toggle {
+    left: 72px;
+  }
+
+  .search-results-panel {
+    top: 80px;
+  }
+
+  .booking-panel {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .map-toolbar,
+  .page-heading {
+    padding: 16px;
+  }
+
+  .toolbar-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .results-toggle {
+    top: 74px;
+    left: 14px;
+  }
+
+  .search-results-panel {
+    top: 132px;
+  }
+
+  .slot-button {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

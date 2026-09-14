@@ -32,6 +32,7 @@ import { AdminPage } from './pages/AdminPage.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
 import { RegisterPage } from './pages/RegisterPage.jsx';
 import { StationPage } from './pages/StationPage.jsx';
+import { formatRoleLabel } from './formatters.js';
 
 function AppShell({ user, onLogout, refreshUser }) {
   const navItems = useMemo(() => ([
@@ -65,7 +66,7 @@ function AppShell({ user, onLogout, refreshUser }) {
           <UserCircle size={28} />
           <div>
             <strong>{user?.fullName ?? 'Guest'}</strong>
-            <span>{user?.role ?? 'Signed out'}</span>
+            <span>{user ? formatRoleLabel(user.role, user.fullName) : 'Signed out'}</span>
           </div>
         </div>
 

@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { Link } from 'react-router-dom';
 import { Calendar, CheckCircle2, IndianRupee, LocateFixed, MapPin, RefreshCw, Search, X, Zap } from 'lucide-react';
 import { apiRequest } from '../api.js';
-import { formatConnectorTypes, formatDistanceKm, formatMoneyFromPaise } from '../formatters.js';
+import { formatConnectorTypes, formatDisplayLabel, formatDistanceKm, formatMoneyFromPaise } from '../formatters.js';
 import { startPaymentCheckout } from '../payments.js';
 
 const MUMBAI_CENTER = [19.076, 72.8777];
@@ -75,7 +75,7 @@ function formatSlotAction(slot) {
   }
 
   if (slot.status === 'PASSED') {
-    return 'Passed';
+    return 'Time passed';
   }
 
   return 'Unavailable';
@@ -288,7 +288,7 @@ export function MapPage() {
   }
 
   function formatSlotTime(slot) {
-    return `${new Date(slot.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(slot.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return `${new Date(slot.startsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - ${new Date(slot.endsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
   }
 
   return (
@@ -329,10 +329,10 @@ export function MapPage() {
           >
             <option value="">Any connector</option>
             <option value="CCS2">CCS2</option>
-            <option value="TYPE_2">TYPE_2</option>
-            <option value="CHADEMO">CHADEMO</option>
-            <option value="GB_T">GB_T</option>
-            <option value="TESLA_NACS">TESLA_NACS</option>
+            <option value="TYPE_2">Type 2</option>
+            <option value="CHADEMO">CHAdeMO</option>
+            <option value="GB_T">GB/T</option>
+            <option value="TESLA_NACS">Tesla NACS</option>
           </select>
         </label>
         <label>
@@ -373,7 +373,7 @@ export function MapPage() {
           onClick={() => setIsResultsOpen((isOpen) => !isOpen)}
         >
           <MapPin size={16} />
-          Stations
+          Station list
           <span>{chargers.length}</span>
         </button>
 
@@ -475,7 +475,7 @@ export function MapPage() {
               <div className="panel-heading">
                 <h2>{selected.name}</h2>
                 <div className="panel-heading-actions">
-                  <span className="status-pill">{selected.status}</span>
+                  <span className="status-pill">{formatDisplayLabel(selected.status)}</span>
                   <button
                     className="icon-button panel-close-button"
                     type="button"
@@ -512,7 +512,7 @@ export function MapPage() {
               {error && <div className="form-error">{error}</div>}
               {message && <div className="form-success">{message}</div>}
 
-              <h3>Available slots</h3>
+              <h3>Choose a time</h3>
               <div className="slot-list">
                 {availabilityLoading ? <p className="muted">Checking slots...</p> : slots.length ? slots.map((slot) => (
                   <button

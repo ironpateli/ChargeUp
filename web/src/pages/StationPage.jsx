@@ -13,7 +13,7 @@ import {
   Zap
 } from 'lucide-react';
 import { apiRequest } from '../api.js';
-import { formatConnectorTypes, formatMoneyFromPaise } from '../formatters.js';
+import { formatConnectorTypes, formatDisplayLabel, formatMoneyFromPaise } from '../formatters.js';
 import { startPaymentCheckout } from '../payments.js';
 
 const DEFAULT_DATE = toDateInputValue();
@@ -57,7 +57,7 @@ function normalizeStation(charger) {
 }
 
 function formatSlotTime(slot) {
-  return `${new Date(slot.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(slot.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  return `${new Date(slot.startsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - ${new Date(slot.endsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 function formatReviewDate(value) {
@@ -78,7 +78,7 @@ function formatSlotAction(slot) {
   }
 
   if (slot.status === 'PASSED') {
-    return 'Passed';
+    return 'Time passed';
   }
 
   return 'Unavailable';
@@ -230,7 +230,7 @@ export function StationPage() {
           <h1>{station.name}</h1>
           <p>{station.addressLine1}, {station.city}, {station.state} {station.postalCode}</p>
           <div className="hero-chip-row">
-            <span><ShieldCheck size={15} /> {station.status}</span>
+            <span><ShieldCheck size={15} /> {formatDisplayLabel(station.status)}</span>
             <span><Zap size={15} /> {station.powerKw} kW</span>
             <span>{station.chargerCount} charger{Number(station.chargerCount) === 1 ? '' : 's'}</span>
             <span><IndianRupee size={15} /> Rs. {station.pricePerHour}/hr</span>

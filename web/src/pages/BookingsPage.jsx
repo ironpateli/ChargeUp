@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api.js';
-import { formatMoneyFromPaise } from '../formatters.js';
+import { formatDisplayLabel, formatMoneyFromPaise } from '../formatters.js';
 
 export function BookingsPage() {
   const [bookings, setBookings] = useState([]);
@@ -90,12 +90,12 @@ export function BookingsPage() {
         </td>
         <td>{new Date(booking.startsAt).toLocaleString()}</td>
         <td>{new Date(booking.endsAt).toLocaleString()}</td>
-        <td><span className="status-pill">{booking.status}</span></td>
+        <td><span className="status-pill">{formatDisplayLabel(booking.status)}</span></td>
         <td>
           {booking.payment ? (
             <div className="payment-cell">
               <strong>{formatMoneyFromPaise(booking.payment.amountPaise, booking.payment.currency)}</strong>
-              <span>{booking.payment.provider} - {booking.payment.status}</span>
+              <span>{formatDisplayLabel(booking.payment.provider)} - {formatDisplayLabel(booking.payment.status)}</span>
               {booking.payment.providerPaymentId && <span>{booking.payment.providerPaymentId}</span>}
               {!booking.payment.providerPaymentId && booking.payment.providerOrderId && <span>{booking.payment.providerOrderId}</span>}
             </div>
