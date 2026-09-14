@@ -108,7 +108,11 @@ export async function searchChargers(filters) {
           similarity(c.name, COALESCE($4::text, '')),
           similarity(c.address_line_1, COALESCE($4::text, '')),
           similarity(c.city, COALESCE($4::text, '')),
-          similarity(c.state, COALESCE($4::text, ''))
+          similarity(c.state, COALESCE($4::text, '')),
+          word_similarity(COALESCE($4::text, ''), c.name),
+          word_similarity(COALESCE($4::text, ''), c.address_line_1),
+          word_similarity(COALESCE($4::text, ''), c.city),
+          word_similarity(COALESCE($4::text, ''), c.state)
         ) AS search_score,
         ST_Distance(
           c.location,
@@ -132,6 +136,10 @@ export async function searchChargers(filters) {
           OR similarity(c.address_line_1, $4) > 0.18
           OR similarity(c.city, $4) > 0.18
           OR similarity(c.state, $4) > 0.18
+          OR word_similarity($4, c.name) > 0.25
+          OR word_similarity($4, c.address_line_1) > 0.25
+          OR word_similarity($4, c.city) > 0.25
+          OR word_similarity($4, c.state) > 0.25
           OR EXISTS (
             SELECT 1
             FROM charger_connector_types search_cct
@@ -154,7 +162,11 @@ export async function searchChargers(filters) {
           similarity(c.name, $4),
           similarity(c.address_line_1, $4),
           similarity(c.city, $4),
-          similarity(c.state, $4)
+          similarity(c.state, $4),
+          word_similarity($4, c.name),
+          word_similarity($4, c.address_line_1),
+          word_similarity($4, c.city),
+          word_similarity($4, c.state)
         ) END DESC,
         distance_meters ASC
       LIMIT 50

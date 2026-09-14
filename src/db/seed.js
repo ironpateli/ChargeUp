@@ -2,6 +2,104 @@ import { pool, withTransaction } from '../shared/db.js';
 import { hashPassword } from '../shared/security/password.js';
 
 const DEMO_PASSWORD = 'StrongPass123';
+const DEMO_CHARGERS = [
+  {
+    name: 'ChargeUp Demo Fast Charger',
+    description: 'Demo charger for local development and frontend testing.',
+    addressLine1: 'Bandra Kurla Complex',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    postalCode: '400051',
+    country: 'India',
+    latitude: 19.059600,
+    longitude: 72.865600,
+    powerKw: 60.00,
+    pricePerHour: 180.00,
+    chargerCount: 1,
+    status: 'ACTIVE',
+    connectorTypes: ['CCS2', 'TYPE_2']
+  },
+  {
+    name: 'Worli Sea Link Charge Hub',
+    description: 'High-speed charging near Worli for city and highway drivers.',
+    addressLine1: 'Worli Sea Face',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    postalCode: '400030',
+    country: 'India',
+    latitude: 19.017600,
+    longitude: 72.817900,
+    powerKw: 120.00,
+    pricePerHour: 260.00,
+    chargerCount: 3,
+    status: 'ACTIVE',
+    connectorTypes: ['CCS2', 'TESLA_NACS']
+  },
+  {
+    name: 'Andheri Metro EV Point',
+    description: 'Mid-speed charger close to metro and office routes.',
+    addressLine1: 'Andheri East Metro Station',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    postalCode: '400069',
+    country: 'India',
+    latitude: 19.119700,
+    longitude: 72.846400,
+    powerKw: 22.00,
+    pricePerHour: 120.00,
+    chargerCount: 2,
+    status: 'ACTIVE',
+    connectorTypes: ['TYPE_2']
+  },
+  {
+    name: 'Powai Lake Charging Station',
+    description: 'Neighbourhood charging spot serving Powai and IIT Bombay area.',
+    addressLine1: 'Powai Lake Road',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    postalCode: '400076',
+    country: 'India',
+    latitude: 19.119000,
+    longitude: 72.905200,
+    powerKw: 50.00,
+    pricePerHour: 160.00,
+    chargerCount: 2,
+    status: 'ACTIVE',
+    connectorTypes: ['CCS2', 'CHADEMO']
+  },
+  {
+    name: 'Navi Mumbai Vashi EV Stop',
+    description: 'Affordable charger near Vashi for Navi Mumbai test searches.',
+    addressLine1: 'Sector 17, Vashi',
+    city: 'Navi Mumbai',
+    state: 'Maharashtra',
+    postalCode: '400703',
+    country: 'India',
+    latitude: 19.076200,
+    longitude: 72.998000,
+    powerKw: 30.00,
+    pricePerHour: 95.00,
+    chargerCount: 2,
+    status: 'ACTIVE',
+    connectorTypes: ['CCS2', 'GB_T']
+  },
+  {
+    name: 'Colaba Heritage Slow Charger',
+    description: 'Slower destination charger for longer city parking sessions.',
+    addressLine1: 'Apollo Bandar, Colaba',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    postalCode: '400001',
+    country: 'India',
+    latitude: 18.921700,
+    longitude: 72.833100,
+    powerKw: 7.40,
+    pricePerHour: 70.00,
+    chargerCount: 1,
+    status: 'ACTIVE',
+    connectorTypes: ['TYPE_2']
+  }
+];
 
 async function upsertUser(client, { fullName, email, role }) {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
@@ -51,15 +149,15 @@ async function upsertOwnerProfile(client, { userId, displayName }) {
   return result.rows[0];
 }
 
-async function upsertDemoCharger(client, ownerProfileId) {
+async function upsertDemoCharger(client, ownerProfileId, charger) {
   const existing = await client.query(
     `
       SELECT id
       FROM chargers
       WHERE owner_profile_id = $1
-        AND name = 'ChargeUp Demo Fast Charger'
+        AND name = $2
     `,
-    [ownerProfileId]
+    [ownerProfileId, charger.name]
   );
 
   let chargerId = existing.rows[0]?.id;
@@ -68,22 +166,36 @@ async function upsertDemoCharger(client, ownerProfileId) {
     await client.query(
       `
         UPDATE chargers
-        SET description = 'Demo charger for local development and frontend testing.',
-            address_line_1 = 'Bandra Kurla Complex',
-            city = 'Mumbai',
-            state = 'Maharashtra',
-            postal_code = '400051',
-            country = 'India',
-            latitude = 19.059600,
-            longitude = 72.865600,
-            power_kw = 60.00,
-            price_per_hour = 180.00,
-            charger_count = 1,
-            status = 'ACTIVE',
+        SET description = $2,
+            address_line_1 = $3,
+            city = $4,
+            state = $5,
+            postal_code = $6,
+            country = $7,
+            latitude = $8,
+            longitude = $9,
+            power_kw = $10,
+            price_per_hour = $11,
+            charger_count = $12,
+            status = $13,
             updated_at = now()
         WHERE id = $1
       `,
-      [chargerId]
+      [
+        chargerId,
+        charger.description,
+        charger.addressLine1,
+        charger.city,
+        charger.state,
+        charger.postalCode,
+        charger.country,
+        charger.latitude,
+        charger.longitude,
+        charger.powerKw,
+        charger.pricePerHour,
+        charger.chargerCount,
+        charger.status
+      ]
     );
   } else {
     const created = await client.query(
@@ -101,26 +213,43 @@ async function upsertDemoCharger(client, ownerProfileId) {
           longitude,
           power_kw,
           price_per_hour,
+          charger_count,
           status
         )
         VALUES (
           $1,
-          'ChargeUp Demo Fast Charger',
-          'Demo charger for local development and frontend testing.',
-          'Bandra Kurla Complex',
-          'Mumbai',
-          'Maharashtra',
-          '400051',
-          'India',
-          19.059600,
-          72.865600,
-          60.00,
-          180.00,
-          'ACTIVE'
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $13,
+          $14
         )
         RETURNING id
       `,
-      [ownerProfileId]
+      [
+        ownerProfileId,
+        charger.name,
+        charger.description,
+        charger.addressLine1,
+        charger.city,
+        charger.state,
+        charger.postalCode,
+        charger.country,
+        charger.latitude,
+        charger.longitude,
+        charger.powerKw,
+        charger.pricePerHour,
+        charger.chargerCount,
+        charger.status
+      ]
     );
 
     chargerId = created.rows[0].id;
@@ -130,23 +259,22 @@ async function upsertDemoCharger(client, ownerProfileId) {
   await client.query(
     `
       INSERT INTO charger_connector_types (charger_id, connector_type)
-      VALUES
-        ($1, 'CCS2'),
-        ($1, 'TYPE_2')
+      SELECT DISTINCT $1::bigint, unnest($2::connector_type[])
     `,
-    [chargerId]
+    [chargerId, charger.connectorTypes]
   );
 
   await client.query(
     `
       INSERT INTO charger_units (charger_id, unit_number)
-      VALUES ($1, 1)
+      SELECT $1, unit_number
+      FROM generate_series(1, $2::integer) AS unit_number
       ON CONFLICT (charger_id, unit_number)
       DO UPDATE SET
         status = 'ACTIVE',
         updated_at = now()
     `,
-    [chargerId]
+    [chargerId, charger.chargerCount]
   );
 
   await client.query(
@@ -155,9 +283,9 @@ async function upsertDemoCharger(client, ownerProfileId) {
       SET status = 'INACTIVE',
           updated_at = now()
       WHERE charger_id = $1
-        AND unit_number > 1
+        AND unit_number > $2
     `,
-    [chargerId]
+    [chargerId, charger.chargerCount]
   );
 
   return { id: chargerId };
@@ -289,7 +417,13 @@ async function seed() {
       displayName: 'ChargeUp Demo Owner'
     });
 
-    const charger = await upsertDemoCharger(client, ownerProfile.id);
+    const chargers = [];
+
+    for (const demoCharger of DEMO_CHARGERS) {
+      chargers.push(await upsertDemoCharger(client, ownerProfile.id, demoCharger));
+    }
+
+    const charger = chargers[0];
     const bookings = await recreateDemoBookings(client, {
       userId: user.id,
       chargerId: charger.id
@@ -301,6 +435,7 @@ async function seed() {
       user,
       ownerProfile,
       charger,
+      chargers,
       bookings
     };
   });
@@ -310,7 +445,7 @@ async function seed() {
   console.log(`Admin: ${result.admin.email}`);
   console.log(`Owner: ${result.owner.email}`);
   console.log(`User: ${result.user.email}`);
-  console.log(`Active charger id: ${result.charger.id}`);
+  console.log(`Active charger ids: ${result.chargers.map((charger) => charger.id).join(', ')}`);
   console.log(`Confirmed booking id: ${result.bookings.confirmedBookingId}`);
   console.log(`Completed booking id: ${result.bookings.completedBookingId}`);
 }
