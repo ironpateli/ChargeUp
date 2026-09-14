@@ -137,6 +137,7 @@ The booking module should not directly depend on Razorpay or Stripe. It should d
 ### Booking
 
 - Users can book fixed time slots.
+- Multi-unit stations can accept multiple bookings for the same time slot, one per active charging unit.
 - Users can cancel bookings.
 - Booked slots are shown as unavailable.
 - Past dates and invalid time slots are rejected.
@@ -289,6 +290,7 @@ Current migrations:
 003_enable_trigram_search.sql
 004_create_charger_availability.sql
 005_add_charger_count.sql
+006_create_charger_units.sql
 ```
 
 Each migration is applied once and recorded in the `schema_migrations` table.

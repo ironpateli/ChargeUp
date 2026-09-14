@@ -82,7 +82,10 @@ export function BookingsPage() {
 
     return sectionBookings.map((booking) => (
       <tr key={booking.id}>
-        <td>{booking.chargerName}</td>
+        <td>
+          {booking.chargerName}
+          {booking.unitNumber && <><br /><span className="muted">Unit {booking.unitNumber}</span></>}
+        </td>
         <td>{new Date(booking.startsAt).toLocaleString()}</td>
         <td>{new Date(booking.endsAt).toLocaleString()}</td>
         <td><span className="status-pill">{booking.status}</span></td>

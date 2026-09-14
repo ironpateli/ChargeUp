@@ -48,6 +48,18 @@ function formatSlotTime(slot) {
   return `${new Date(slot.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(slot.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+function formatSlotCapacity(slot) {
+  if (slot.status === 'AVAILABLE') {
+    return `${slot.availableCount ?? 1}/${slot.totalUnits ?? 1} available`;
+  }
+
+  if (slot.status === 'BOOKED') {
+    return `0/${slot.totalUnits ?? slot.bookedCount ?? 1} available`;
+  }
+
+  return slot.status;
+}
+
 export function OwnerPage({ user, refreshUser }) {
   const [ownerProfile, setOwnerProfile] = useState(null);
   const [chargers, setChargers] = useState([]);
@@ -433,7 +445,7 @@ export function OwnerPage({ user, refreshUser }) {
                     {availabilityLoading ? <p className="muted">Refreshing slots...</p> : availabilitySlots.length ? availabilitySlots.map((slot) => (
                       <div className="owner-slot-row" key={slot.startsAt}>
                         <span>{formatSlotTime(slot)}</span>
-                        <strong>{slot.status}</strong>
+                        <strong>{formatSlotCapacity(slot)}</strong>
                         {slot.status === 'AVAILABLE' && (
                           <button className="secondary-button" type="button" onClick={() => disableSlot(slot)}>Disable</button>
                         )}
@@ -453,7 +465,11 @@ export function OwnerPage({ user, refreshUser }) {
                 <tbody>
                   {bookings.map((booking) => (
                     <tr key={booking.id}>
-                      <td>{booking.chargerName}<br /><span className="muted">{new Date(booking.startsAt).toLocaleString()}</span></td>
+                      <td>
+                        {booking.chargerName}
+                        <br />
+                        <span className="muted">Unit {booking.unitNumber} - {new Date(booking.startsAt).toLocaleString()}</span>
+                      </td>
                       <td><span className="status-pill">{booking.status}</span></td>
                     </tr>
                   ))}

@@ -67,6 +67,22 @@ function formatReviewDate(value) {
   });
 }
 
+function formatSlotAction(slot) {
+  if (slot.status === 'AVAILABLE') {
+    return `${slot.availableCount ?? 1} available`;
+  }
+
+  if (slot.status === 'BOOKED') {
+    return 'Fully booked';
+  }
+
+  if (slot.status === 'PASSED') {
+    return 'Passed';
+  }
+
+  return 'Unavailable';
+}
+
 export function StationPage() {
   const { chargerId } = useParams();
   const [station, setStation] = useState(null);
@@ -85,8 +101,8 @@ export function StationPage() {
   ), [station]);
 
   const slots = availability?.slots ?? [];
-  const availableCount = slots.filter((slot) => slot.status === 'AVAILABLE').length;
-  const bookedCount = slots.filter((slot) => slot.status === 'BOOKED').length;
+  const availableCount = slots.reduce((total, slot) => total + (slot.status === 'AVAILABLE' ? Number(slot.availableCount ?? 1) : 0), 0);
+  const bookedCount = slots.reduce((total, slot) => total + Number(slot.bookedCount ?? (slot.status === 'BOOKED' ? 1 : 0)), 0);
 
   useEffect(() => {
     let isMounted = true;
@@ -245,7 +261,7 @@ export function StationPage() {
             <div className="overview-tile">
               <Calendar size={18} />
               <span>Available today</span>
-              <strong>{availableCount} slots</strong>
+              <strong>{availableCount} unit slot{availableCount === 1 ? '' : 's'}</strong>
             </div>
             <div className="overview-tile">
               <MessageSquareText size={18} />
@@ -333,7 +349,7 @@ export function StationPage() {
                 disabled={slot.status !== 'AVAILABLE'}
               >
                 <span>{formatSlotTime(slot)}</span>
-                <small>{slot.status === 'AVAILABLE' ? 'Book' : slot.status === 'BOOKED' ? 'Booked' : slot.status === 'PASSED' ? 'Passed' : 'Unavailable'}</small>
+                <small>{formatSlotAction(slot)}</small>
               </button>
             )) : <p className="muted">No slots available for this date.</p>}
           </div>

@@ -60,6 +60,32 @@ function toAvailabilityOverride(row) {
   };
 }
 
+async function syncChargerUnits(client, chargerId, chargerCount) {
+  await client.query(
+    `
+      INSERT INTO charger_units (charger_id, unit_number)
+      SELECT $1, unit_number
+      FROM generate_series(1, $2::integer) AS unit_number
+      ON CONFLICT (charger_id, unit_number)
+      DO UPDATE SET
+        status = 'ACTIVE',
+        updated_at = now()
+    `,
+    [chargerId, chargerCount]
+  );
+
+  await client.query(
+    `
+      UPDATE charger_units
+      SET status = 'INACTIVE',
+          updated_at = now()
+      WHERE charger_id = $1
+        AND unit_number > $2
+    `,
+    [chargerId, chargerCount]
+  );
+}
+
 export async function searchChargers(filters) {
   const result = await query(
     `
@@ -195,10 +221,24 @@ export async function getChargerAvailability(chargerId, date) {
     [chargerId, dayStart, dayEnd]
   );
   const overrides = overridesResult.rows.map(toAvailabilityOverride);
+  const activeUnitsResult = await query(
+    `
+      SELECT id, unit_number
+      FROM charger_units
+      WHERE charger_id = $1
+        AND status = 'ACTIVE'
+      ORDER BY unit_number ASC
+    `,
+    [chargerId]
+  );
+  const activeUnits = activeUnitsResult.rows.map((unit) => ({
+    id: Number(unit.id),
+    unitNumber: Number(unit.unit_number)
+  }));
 
   const bookingsResult = await query(
     `
-      SELECT starts_at, ends_at
+      SELECT charger_unit_id, starts_at, ends_at
       FROM bookings
       WHERE charger_id = $1
         AND status = 'CONFIRMED'
@@ -210,6 +250,7 @@ export async function getChargerAvailability(chargerId, date) {
   );
 
   const bookedSlots = bookingsResult.rows.map((booking) => ({
+    chargerUnitId: Number(booking.charger_unit_id),
     startsAt: booking.starts_at,
     endsAt: booking.ends_at
   }));
@@ -219,6 +260,7 @@ export async function getChargerAvailability(chargerId, date) {
 
   if (charger.status === 'ACTIVE' && rule.is_active) {
     const bookedRanges = bookedSlots.map((slot) => ({
+      chargerUnitId: slot.chargerUnitId,
       startsAt: new Date(slot.startsAt),
       endsAt: new Date(slot.endsAt)
     }));
@@ -243,6 +285,13 @@ export async function getChargerAvailability(chargerId, date) {
         break;
       }
 
+      const bookedUnitIds = new Set(bookedRanges
+        .filter((slot) => rangesOverlap(startsAt, endsAt, slot.startsAt, slot.endsAt))
+        .map((slot) => slot.chargerUnitId));
+      const bookedCount = bookedUnitIds.size;
+      const totalUnits = activeUnits.length;
+      const availableCount = Math.max(totalUnits - bookedCount, 0);
+      const isFullyBooked = totalUnits > 0 && availableCount === 0;
       const isBooked = bookedRanges.some((slot) => (
         rangesOverlap(startsAt, endsAt, slot.startsAt, slot.endsAt)
       ));
@@ -251,17 +300,23 @@ export async function getChargerAvailability(chargerId, date) {
         rangesOverlap(startsAt, endsAt, slot.startsAtDate, slot.endsAtDate)
       ));
 
-      if (isBooked) {
+      if (isFullyBooked) {
         slots.push({
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
-          status: 'BOOKED'
+          status: 'BOOKED',
+          totalUnits,
+          bookedCount,
+          availableCount
         });
       } else if (override?.status === 'UNAVAILABLE') {
         slots.push({
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
           status: 'UNAVAILABLE',
+          totalUnits,
+          bookedCount,
+          availableCount: 0,
           overrideId: override.id,
           reason: override.reason
         });
@@ -269,17 +324,26 @@ export async function getChargerAvailability(chargerId, date) {
         slots.push({
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
-          status: 'PASSED'
+          status: 'PASSED',
+          totalUnits,
+          bookedCount,
+          availableCount
         });
       } else {
         slots.push({
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
-          status: 'AVAILABLE'
+          status: 'AVAILABLE',
+          totalUnits,
+          bookedCount,
+          availableCount
         });
         availableSlots.push({
           startsAt: startsAt.toISOString(),
-          endsAt: endsAt.toISOString()
+          endsAt: endsAt.toISOString(),
+          totalUnits,
+          bookedCount,
+          availableCount
         });
       }
     }
@@ -303,6 +367,7 @@ export async function getChargerAvailability(chargerId, date) {
       startsAt: toIsoAtLocalTime(date, rule.starts_at),
       endsAt: toIsoAtLocalTime(date, rule.ends_at)
     },
+    activeUnitCount: activeUnits.length,
     bookedSlots,
     overrides,
     availableSlots,
@@ -545,6 +610,10 @@ export async function updateCharger(user, chargerId, input) {
       ]
     );
 
+    if (input.chargerCount !== undefined) {
+      await syncChargerUnits(client, chargerId, input.chargerCount);
+    }
+
     if (input.connectorTypes) {
       await client.query('DELETE FROM charger_connector_types WHERE charger_id = $1', [chargerId]);
       await client.query(
@@ -648,6 +717,8 @@ export async function createCharger(userId, input) {
     );
 
     const chargerId = chargerResult.rows[0].id;
+
+    await syncChargerUnits(client, chargerId, input.chargerCount);
 
     await client.query(
       `

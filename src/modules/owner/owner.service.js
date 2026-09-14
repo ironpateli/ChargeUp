@@ -31,6 +31,8 @@ export async function getOwnerBookings(userId) {
         b.id,
         b.user_id,
         b.charger_id,
+        b.charger_unit_id,
+        cu.unit_number,
         c.name AS charger_name,
         b.starts_at,
         b.ends_at,
@@ -38,6 +40,7 @@ export async function getOwnerBookings(userId) {
         b.created_at
       FROM bookings b
       JOIN chargers c ON c.id = b.charger_id
+      JOIN charger_units cu ON cu.id = b.charger_unit_id
       WHERE c.owner_profile_id = $1
       ORDER BY b.starts_at DESC
     `,
@@ -48,6 +51,8 @@ export async function getOwnerBookings(userId) {
     id: Number(row.id),
     userId: Number(row.user_id),
     chargerId: Number(row.charger_id),
+    chargerUnitId: Number(row.charger_unit_id),
+    unitNumber: Number(row.unit_number),
     chargerName: row.charger_name,
     startsAt: row.starts_at,
     endsAt: row.ends_at,

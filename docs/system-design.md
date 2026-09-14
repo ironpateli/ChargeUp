@@ -198,8 +198,11 @@ charger_availability_rules
 charger_availability_overrides
   individual slot availability changes
 
+charger_units
+  physical charging units under one station/listing
+
 bookings
-  user reservations for charger time slots
+  user reservations assigned to one charging unit
 
 reviews
   user feedback for chargers
@@ -285,21 +288,22 @@ Meaning:
 
 ## 9. Booking Consistency
 
-The current version uses confirm-on-submit:
+The current version uses confirm-on-submit with physical unit assignment:
 
 1. User views availability.
 2. User submits a booking request.
-3. Backend validates the requested slot.
-4. Backend inserts the booking.
-5. PostgreSQL rejects the insert if the same charger already has an overlapping confirmed booking.
+3. Backend validates the requested slot against the owner's availability rule.
+4. Backend finds one active charging unit that is not booked for that range.
+5. Backend inserts the booking for that unit.
+6. PostgreSQL rejects the insert if the same unit already has an overlapping confirmed booking.
 
 The key database rule is:
 
 ```text
-For the same charger_id, confirmed booking time ranges must not overlap.
+For the same charger_unit_id, confirmed booking time ranges must not overlap.
 ```
 
-Cancelled and completed bookings do not block future slots.
+That means a station/listing with 4 active charging units can accept up to 4 confirmed bookings for the same time slot. Cancelled and completed bookings do not block future slots.
 
 Expired confirmed bookings are automatically moved to `COMPLETED` when booking-related reads run.
 
@@ -347,6 +351,8 @@ Implemented:
 - Owner-managed weekly availability.
 - Individual slot overrides.
 - Charger count per station/listing.
+- Physical charger unit assignment.
+- Capacity-aware booking slots.
 - Booking creation.
 - Booking cancellation.
 - Booking completion.

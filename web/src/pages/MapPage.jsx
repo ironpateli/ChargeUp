@@ -64,6 +64,22 @@ function normalizeCharger(charger) {
   };
 }
 
+function formatSlotAction(slot) {
+  if (slot.status === 'AVAILABLE') {
+    return `${slot.availableCount ?? 1} available`;
+  }
+
+  if (slot.status === 'BOOKED') {
+    return 'Fully booked';
+  }
+
+  if (slot.status === 'PASSED') {
+    return 'Passed';
+  }
+
+  return 'Unavailable';
+}
+
 export function MapPage() {
   const [center, setCenter] = useState(MUMBAI_CENTER);
   const [myLocation, setMyLocation] = useState(null);
@@ -505,7 +521,7 @@ export function MapPage() {
                     disabled={slot.status !== 'AVAILABLE'}
                   >
                     <span>{formatSlotTime(slot)}</span>
-                    <small>{slot.status === 'AVAILABLE' ? 'Book' : slot.status === 'BOOKED' ? 'Booked' : slot.status === 'PASSED' ? 'Passed' : 'Unavailable'}</small>
+                    <small>{formatSlotAction(slot)}</small>
                   </button>
                 )) : <p className="muted">No slots available for this date.</p>}
               </div>

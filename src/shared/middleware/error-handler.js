@@ -14,7 +14,7 @@ export function errorHandler(error, req, res, next) {
     return res.status(409).json({
       error: {
         code: 'BOOKING_SLOT_CONFLICT',
-        message: 'This charger is already booked for the requested time slot.'
+        message: 'No charging unit is available for the requested time slot.'
       }
     });
   }
