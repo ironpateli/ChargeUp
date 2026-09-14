@@ -78,6 +78,7 @@ async function upsertDemoCharger(client, ownerProfileId) {
             longitude = 72.865600,
             power_kw = 60.00,
             price_per_hour = 180.00,
+            charger_count = 1,
             status = 'ACTIVE',
             updated_at = now()
         WHERE id = $1
@@ -136,10 +137,45 @@ async function upsertDemoCharger(client, ownerProfileId) {
     [chargerId]
   );
 
+  await client.query(
+    `
+      INSERT INTO charger_units (charger_id, unit_number)
+      VALUES ($1, 1)
+      ON CONFLICT (charger_id, unit_number)
+      DO UPDATE SET
+        status = 'ACTIVE',
+        updated_at = now()
+    `,
+    [chargerId]
+  );
+
+  await client.query(
+    `
+      UPDATE charger_units
+      SET status = 'INACTIVE',
+          updated_at = now()
+      WHERE charger_id = $1
+        AND unit_number > 1
+    `,
+    [chargerId]
+  );
+
   return { id: chargerId };
 }
 
 async function recreateDemoBookings(client, { userId, chargerId }) {
+  const unitResult = await client.query(
+    `
+      SELECT id
+      FROM charger_units
+      WHERE charger_id = $1
+        AND unit_number = 1
+        AND status = 'ACTIVE'
+    `,
+    [chargerId]
+  );
+  const chargerUnitId = unitResult.rows[0].id;
+
   await client.query(
     `
       DELETE FROM reviews
@@ -167,6 +203,7 @@ async function recreateDemoBookings(client, { userId, chargerId }) {
       INSERT INTO bookings (
         user_id,
         charger_id,
+        charger_unit_id,
         starts_at,
         ends_at,
         status
@@ -174,13 +211,14 @@ async function recreateDemoBookings(client, { userId, chargerId }) {
       VALUES (
         $1,
         $2,
+        $3,
         '2026-10-20T10:00:00+05:30',
         '2026-10-20T11:00:00+05:30',
         'CONFIRMED'
       )
       RETURNING id
     `,
-    [userId, chargerId]
+    [userId, chargerId, chargerUnitId]
   );
 
   const completed = await client.query(
@@ -188,6 +226,7 @@ async function recreateDemoBookings(client, { userId, chargerId }) {
       INSERT INTO bookings (
         user_id,
         charger_id,
+        charger_unit_id,
         starts_at,
         ends_at,
         status
@@ -195,13 +234,14 @@ async function recreateDemoBookings(client, { userId, chargerId }) {
       VALUES (
         $1,
         $2,
+        $3,
         '2026-10-19T08:00:00+05:30',
         '2026-10-19T09:00:00+05:30',
         'COMPLETED'
       )
       RETURNING id
     `,
-    [userId, chargerId]
+    [userId, chargerId, chargerUnitId]
   );
 
   await client.query(

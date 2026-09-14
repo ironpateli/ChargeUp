@@ -261,7 +261,7 @@ export async function createCheckout(user, input) {
 }
 
 export async function verifyRazorpayPayment(userId, input) {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const paymentResult = await client.query(
       `
         SELECT *
@@ -296,7 +296,7 @@ export async function verifyRazorpayPayment(userId, input) {
     });
 
     if (!isValid) {
-      await failPendingBooking(client, payment.booking_id);
+      const booking = await failPendingBooking(client, payment.booking_id);
       await client.query(
         `
           UPDATE payments
@@ -307,7 +307,16 @@ export async function verifyRazorpayPayment(userId, input) {
         `,
         [payment.id, input.razorpayPaymentId]
       );
-      throw new AppError('Razorpay signature verification failed.', 400, 'RAZORPAY_SIGNATURE_INVALID');
+
+      return {
+        invalidSignature: true,
+        payment: toPayment({
+          ...payment,
+          status: 'FAILED',
+          provider_payment_id: input.razorpayPaymentId
+        }),
+        booking
+      };
     }
 
     const booking = await confirmPendingBooking(client, payment.booking_id);
@@ -328,6 +337,12 @@ export async function verifyRazorpayPayment(userId, input) {
       booking
     };
   });
+
+  if (result.invalidSignature) {
+    throw new AppError('Razorpay signature verification failed.', 400, 'RAZORPAY_SIGNATURE_INVALID');
+  }
+
+  return result;
 }
 
 export async function failMockPayment(userId, paymentId) {
