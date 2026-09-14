@@ -1,11 +1,11 @@
 import { Router } from 'express';
+import { AppError } from '../../shared/errors.js';
 import { requireAuth } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import {
   cancelBooking,
   clearMyCancelledBookings,
   clearMyCompletedBookings,
-  createBooking,
   getMyBookings
 } from './booking.service.js';
 import {
@@ -44,8 +44,7 @@ bookingRouter.delete('/me/completed', requireAuth, async (req, res, next) => {
 
 bookingRouter.post('/', requireAuth, validate(createBookingSchema), async (req, res, next) => {
   try {
-    const booking = await createBooking(req.user.id, req.validated.body);
-    res.status(201).json({ data: booking });
+    throw new AppError('Bookings must be created through payment checkout.', 402, 'BOOKING_PAYMENT_REQUIRED');
   } catch (error) {
     next(error);
   }

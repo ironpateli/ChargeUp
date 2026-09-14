@@ -12,13 +12,14 @@ import { chargerRouter } from './modules/chargers/charger.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
 import { ownerProfileRouter } from './modules/owner-profiles/owner-profile.routes.js';
 import { ownerRouter } from './modules/owner/owner.routes.js';
-import { paymentRouter } from './modules/payments/payment.routes.js';
+import { paymentRouter, razorpayWebhookRouter } from './modules/payments/payment.routes.js';
 import { reviewRouter } from './modules/reviews/review.routes.js';
 
 const app = express();
 
 app.use(helmet());
 app.use(cors());
+app.use('/payments/razorpay/webhook', express.raw({ type: 'application/json' }), razorpayWebhookRouter);
 app.use(express.json());
 app.use(morgan('dev'));
 

@@ -5,10 +5,6 @@ const BOOKING_TIME_ZONE_OFFSET_MINUTES = 330;
 const BOOKING_START_HOUR = 6;
 const BOOKING_END_HOUR = 22;
 
-function toIsoAtLocalHour(date, hour) {
-  return `${date}T${String(hour).padStart(2, '0')}:00:00+05:30`;
-}
-
 function toIsoAtLocalTime(date, time) {
   const [hour, minute] = time.slice(0, 5).split(':');
 

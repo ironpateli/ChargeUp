@@ -125,10 +125,12 @@ Browser
   - React Router
   - Leaflet map
   - Shared API client
+  - Razorpay Checkout
 
 Express App
   - helmet
   - cors
+  - raw body parser for Razorpay webhook signature verification
   - express.json
   - morgan
   - auth middleware
@@ -210,6 +212,9 @@ reviews
 
 payments
   checkout and payment records connected to bookings
+
+payment_webhook_events
+  idempotency log for Razorpay webhook deliveries
 ```
 
 This means a user account can become an owner by creating an owner profile. The charger belongs to the owner profile, not directly to the user account.
@@ -323,8 +328,9 @@ Current behavior:
 4. Mock mode captures immediately for local testing.
 5. Razorpay mode creates an order and sends checkout data to the frontend.
 6. Frontend opens Razorpay Checkout.
-7. Backend verifies the Razorpay signature.
-8. Valid payment changes the payment to `CAPTURED` and the booking to `CONFIRMED`.
+7. Backend verifies the Razorpay checkout signature for the immediate user-facing success path.
+8. Razorpay webhooks provide a second server-to-server confirmation path.
+9. Valid payment changes the payment to `CAPTURED` and the booking to `CONFIRMED`.
 
 For India-facing production, Razorpay is the practical first real provider.
 
@@ -343,6 +349,23 @@ Booking service -> Payment service -> Payment provider implementation
 ```
 
 Pending payment holds are short-lived. Expired holds are cancelled when booking and availability flows run, so abandoned checkout sessions do not block capacity forever.
+
+Direct booking creation is blocked for normal API users. Clients must use:
+
+```text
+POST /payments/checkout
+```
+
+This keeps booking creation tied to the payment lifecycle instead of allowing unpaid confirmed bookings.
+
+Webhook design:
+
+- Razorpay sends events to `POST /payments/razorpay/webhook`.
+- The route uses `express.raw()` before normal JSON parsing.
+- The backend verifies `X-Razorpay-Signature` with HMAC SHA256 over the raw request body.
+- `x-razorpay-event-id` is stored in `payment_webhook_events` so duplicate deliveries are ignored.
+- `payment.captured` and `order.paid` can confirm pending bookings.
+- `payment.failed` can fail the payment and cancel the pending booking hold.
 
 ## 11. Current MVP Status
 
@@ -364,6 +387,8 @@ Implemented:
 - Mock payment provider.
 - Razorpay order creation.
 - Razorpay signature verification.
+- Razorpay webhook handling.
+- Webhook idempotency.
 - Booking creation.
 - Booking cancellation.
 - Booking completion.
@@ -375,7 +400,6 @@ Implemented:
 
 Not implemented yet:
 
-- Webhooks.
 - Notifications.
 - Payouts.
 - Audit logs.
@@ -386,10 +410,8 @@ Not implemented yet:
 
 ### Next Backend Features
 
-- Razorpay webhook handling.
 - Refund flow.
 - Payment retry flow.
-- Webhook idempotency.
 - Notification service.
 - Forgot password flow.
 - Rate limiting.

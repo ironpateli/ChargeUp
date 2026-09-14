@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { config } from '../../shared/config.js';
-import { query, withTransaction } from '../../shared/db.js';
+import { withTransaction } from '../../shared/db.js';
 import { AppError } from '../../shared/errors.js';
 import {
   confirmPendingBooking,
@@ -11,13 +11,8 @@ import {
 } from '../bookings/booking.service.js';
 
 const PAYMENT_HOLD_MINUTES = 10;
-const TIME_ZONE_OFFSET = '+05:30';
 const DEFAULT_START_HOUR = 6;
 const DEFAULT_END_HOUR = 22;
-
-function toIsoAtLocalHour(date, hour) {
-  return `${date}T${String(hour).padStart(2, '0')}:00:00${TIME_ZONE_OFFSET}`;
-}
 
 function toBookingLocalDate(date) {
   const localDate = new Date(date.getTime() + 330 * 60 * 1000);
@@ -124,6 +119,133 @@ function verifyRazorpaySignature({ orderId, paymentId, signature }) {
   const actual = Buffer.from(signature);
 
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+function verifyRazorpayWebhookSignature({ rawBody, signature }) {
+  if (!config.razorpayWebhookSecret) {
+    throw new AppError('Razorpay webhook secret is not configured.', 500, 'RAZORPAY_WEBHOOK_NOT_CONFIGURED');
+  }
+
+  if (!signature) {
+    throw new AppError('Razorpay webhook signature is required.', 400, 'RAZORPAY_WEBHOOK_SIGNATURE_REQUIRED');
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', config.razorpayWebhookSecret)
+    .update(rawBody)
+    .digest('hex');
+
+  const expected = Buffer.from(expectedSignature);
+  const actual = Buffer.from(signature);
+
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+function extractPaymentEntity(payload) {
+  return payload.payload?.payment?.entity ?? null;
+}
+
+function extractOrderEntity(payload) {
+  return payload.payload?.order?.entity ?? null;
+}
+
+async function capturePaymentFromWebhook(client, payload) {
+  const paymentEntity = extractPaymentEntity(payload);
+  const orderEntity = extractOrderEntity(payload);
+  const providerOrderId = paymentEntity?.order_id ?? orderEntity?.id;
+  const providerPaymentId = paymentEntity?.id ?? null;
+
+  if (!providerOrderId) {
+    return { action: 'ignored', reason: 'missing_order_id' };
+  }
+
+  const paymentResult = await client.query(
+    `
+      SELECT *
+      FROM payments
+      WHERE provider = 'RAZORPAY'
+        AND provider_order_id = $1
+      FOR UPDATE
+    `,
+    [providerOrderId]
+  );
+  const payment = paymentResult.rows[0];
+
+  if (!payment) {
+    return { action: 'ignored', reason: 'payment_not_found' };
+  }
+
+  let booking = null;
+
+  if (payment.status !== 'CAPTURED') {
+    booking = await confirmPendingBooking(client, payment.booking_id);
+  }
+
+  const capturedResult = await client.query(
+    `
+      UPDATE payments
+      SET status = 'CAPTURED',
+          provider_payment_id = COALESCE($2, provider_payment_id),
+          updated_at = now()
+      WHERE id = $1
+      RETURNING *
+    `,
+    [payment.id, providerPaymentId]
+  );
+
+  return {
+    action: 'captured',
+    payment: toPayment(capturedResult.rows[0]),
+    booking
+  };
+}
+
+async function failPaymentFromWebhook(client, payload) {
+  const paymentEntity = extractPaymentEntity(payload);
+  const providerOrderId = paymentEntity?.order_id;
+  const providerPaymentId = paymentEntity?.id ?? null;
+
+  if (!providerOrderId) {
+    return { action: 'ignored', reason: 'missing_order_id' };
+  }
+
+  const paymentResult = await client.query(
+    `
+      SELECT *
+      FROM payments
+      WHERE provider = 'RAZORPAY'
+        AND provider_order_id = $1
+      FOR UPDATE
+    `,
+    [providerOrderId]
+  );
+  const payment = paymentResult.rows[0];
+
+  if (!payment) {
+    return { action: 'ignored', reason: 'payment_not_found' };
+  }
+
+  const booking = await failPendingBooking(client, payment.booking_id);
+  const failedResult = await client.query(
+    `
+      UPDATE payments
+      SET status = CASE
+            WHEN status = 'CAPTURED' THEN status
+            ELSE 'FAILED'
+          END,
+          provider_payment_id = COALESCE($2, provider_payment_id),
+          updated_at = now()
+      WHERE id = $1
+      RETURNING *
+    `,
+    [payment.id, providerPaymentId]
+  );
+
+  return {
+    action: 'failed',
+    payment: toPayment(failedResult.rows[0]),
+    booking
+  };
 }
 
 export async function createCheckout(user, input) {
@@ -343,6 +465,83 @@ export async function verifyRazorpayPayment(userId, input) {
   }
 
   return result;
+}
+
+export async function handleRazorpayWebhook({ rawBody, signature, eventId }) {
+  if (!Buffer.isBuffer(rawBody)) {
+    throw new AppError('Razorpay webhook must be sent as raw JSON.', 400, 'RAZORPAY_WEBHOOK_BODY_INVALID');
+  }
+
+  if (!eventId) {
+    throw new AppError('Razorpay webhook event id is required.', 400, 'RAZORPAY_WEBHOOK_EVENT_ID_REQUIRED');
+  }
+
+  const isValid = verifyRazorpayWebhookSignature({ rawBody, signature });
+
+  if (!isValid) {
+    throw new AppError('Razorpay webhook signature verification failed.', 400, 'RAZORPAY_WEBHOOK_SIGNATURE_INVALID');
+  }
+
+  let payload;
+
+  try {
+    payload = JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    throw new AppError('Razorpay webhook payload must be valid JSON.', 400, 'RAZORPAY_WEBHOOK_JSON_INVALID');
+  }
+
+  return withTransaction(async (client) => {
+    const eventResult = await client.query(
+      `
+        INSERT INTO payment_webhook_events (
+          provider,
+          event_id,
+          event_type,
+          payload
+        )
+        VALUES ('RAZORPAY', $1, $2, $3)
+        ON CONFLICT (event_id)
+        DO NOTHING
+        RETURNING id
+      `,
+      [eventId, payload.event ?? 'unknown', payload]
+    );
+
+    if (eventResult.rowCount === 0) {
+      return {
+        received: true,
+        duplicate: true,
+        eventId
+      };
+    }
+
+    let processingResult;
+
+    if (payload.event === 'payment.captured' || payload.event === 'order.paid') {
+      processingResult = await capturePaymentFromWebhook(client, payload);
+    } else if (payload.event === 'payment.failed') {
+      processingResult = await failPaymentFromWebhook(client, payload);
+    } else {
+      processingResult = { action: 'ignored', reason: 'unsupported_event' };
+    }
+
+    await client.query(
+      `
+        UPDATE payment_webhook_events
+        SET processed_at = now()
+        WHERE event_id = $1
+      `,
+      [eventId]
+    );
+
+    return {
+      received: true,
+      duplicate: false,
+      eventId,
+      eventType: payload.event ?? 'unknown',
+      ...processingResult
+    };
+  });
 }
 
 export async function failMockPayment(userId, paymentId) {

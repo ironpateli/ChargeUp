@@ -9,10 +9,26 @@ import {
 import {
   createCheckout,
   failMockPayment,
+  handleRazorpayWebhook,
   verifyRazorpayPayment
 } from './payment.service.js';
 
 export const paymentRouter = Router();
+export const razorpayWebhookRouter = Router();
+
+razorpayWebhookRouter.post('/', async (req, res, next) => {
+  try {
+    const result = await handleRazorpayWebhook({
+      rawBody: req.body,
+      signature: req.get('X-Razorpay-Signature'),
+      eventId: req.get('x-razorpay-event-id')
+    });
+
+    res.json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+});
 
 paymentRouter.post('/checkout', requireAuth, validate(createCheckoutSchema), async (req, res, next) => {
   try {

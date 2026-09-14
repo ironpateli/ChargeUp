@@ -85,6 +85,7 @@ Current behavior:
 - Payment checkout creates a short-lived `PENDING_PAYMENT` booking hold.
 - Pending payment holds consume charging-unit capacity.
 - Expired pending payment holds are cancelled automatically when booking or availability flows run.
+- Razorpay webhooks can also confirm or fail pending payments through a signed server-to-server callback.
 
 The booking module does not directly depend on Razorpay. It depends on the internal payment module/provider flow.
 
@@ -139,6 +140,7 @@ The booking module does not directly depend on Razorpay. It depends on the inter
 ### Booking
 
 - Users can book fixed time slots.
+- Booking creation from the public API goes through payment checkout, so unpaid direct booking creation is blocked.
 - Multi-unit stations can accept multiple bookings for the same time slot, one per active charging unit.
 - Booking from the frontend goes through the payment checkout flow.
 - Users can cancel bookings.
@@ -188,6 +190,8 @@ The booking module does not directly depend on Razorpay. It depends on the inter
 - Razorpay order creation when configured.
 - Razorpay Checkout frontend integration.
 - Razorpay signature verification endpoint.
+- Razorpay webhook endpoint with raw-body HMAC verification.
+- Duplicate Razorpay webhook events are ignored idempotently.
 - Payment records are stored in PostgreSQL.
 - Pending payment bookings hold capacity until confirmed, cancelled, or expired.
 
@@ -225,6 +229,7 @@ DELETE /bookings/me/completed
 
 POST   /payments/checkout
 POST   /payments/razorpay/verify
+POST   /payments/razorpay/webhook
 POST   /payments/mock/:paymentId/fail
 
 POST   /reviews
@@ -309,6 +314,7 @@ Current migrations:
 006_create_charger_units.sql
 007_add_pending_payment_booking_status.sql
 008_create_payments.sql
+009_create_payment_webhook_events.sql
 ```
 
 Each migration is applied once and recorded in the `schema_migrations` table.
@@ -317,7 +323,6 @@ Because this project is still in active learning/development, early schema chang
 
 ## Important Missing Features
 
-- Payment webhooks.
 - Refund handling.
 - Owner payout tracking.
 - Email/SMS notifications.

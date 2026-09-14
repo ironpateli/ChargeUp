@@ -295,9 +295,6 @@ export async function getChargerAvailability(chargerId, date) {
       const totalUnits = activeUnits.length;
       const availableCount = Math.max(totalUnits - bookedCount, 0);
       const isFullyBooked = totalUnits > 0 && availableCount === 0;
-      const isBooked = bookedRanges.some((slot) => (
-        rangesOverlap(startsAt, endsAt, slot.startsAt, slot.endsAt)
-      ));
       const isPassed = startsAt <= new Date();
       const override = overrideRanges.find((slot) => (
         rangesOverlap(startsAt, endsAt, slot.startsAtDate, slot.endsAtDate)
